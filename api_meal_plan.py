@@ -12,6 +12,7 @@ from flask import Flask, jsonify, request
 import re
 from collections import defaultdict
 from fractions import Fraction
+import unicodedata
 
 app = Flask(__name__)
 
@@ -493,13 +494,290 @@ def get_meal_plan():
     meal_plan = generate_meal_plan({})
     return jsonify(meal_plan)
 
+def clean_and_categorize_ingredients(meal_plan):
+    ingredients_list = set()
+
+    for day, meals in meal_plan.items():
+        for meal in meals:
+            ner_items = meal.get("NER", [])
+            ingredients = meal.get("ingredients", [])
+
+            ingredients_text = " ".join(ingredients).lower()
+
+            for ner in ner_items:
+                if ner.lower() in ingredients_text:
+                    ingredients_list.add(ner)
+    # Remove invalid entries (errors, empty strings, etc.)
+    cleaned = [
+        ing for ing in ingredients_list 
+        if isinstance(ing, str) 
+        and not ing.startswith(('Error', 'N', 'O', 'Votre choix'))
+    ]
+    
+    # Define category keywords (case-insensitive)
+    categories = {
+        "oils_fats": [
+            "huile", "huile d'olive", "huile de maïs", "huile de sésame", "huile végétale", 
+            "lard", "margarine", "mayonnaise", "shortening végétal"
+        ],
+        "fruits_vegetables": [
+            "abricots", "ail", "ananas", "artichauts", "artichauts gelé", "aubergine", 
+            "banane", "bananes", "bleuets", "bleuets frais", "brocoli", "brocoli frais", 
+            "brocoli gelé", "carotte", "carotte râpée", "carottes", "céleri", "cerise noire", 
+            "cerises", "champignon", "champignons", "champignons frais", "chou", "chou rouge", 
+            "chou vert", "chou-fleur", "citron", "citron vert", "citrons", "citrouille", 
+            "concombre", "concombres", "courge jaune", "courgettes", "dates", "échalotes", 
+            "épinard", "fraises", "fraises fraîches", "framboise", "framboises", "gingembre frais", 
+            "haricots verts", "haricots verts gelés", "laitue romaine", "légumes", "légumes mélangés", 
+            "légumes mélangés surgelés", "légumes verts", "mangue", "navets", "oignon", 
+            "oignon blanc", "oignon frais", "oignon rouge", "oignon vert", "olive", 
+            "olives", "orange", "oranges", "pomme", "pomme de terre", "pommes", "pommes de terre", 
+            "pommes de terre rouges", "pommes fraîches", "pommes vertes", "potiron", "pruneaux", 
+            "raisin", "raisins", "raisins secs", "rhubarbe", "tomate", "tomate fraîche", "tomates"
+        ],
+        "meat_seafood": [
+            "agneau", "anchois", "bacon", "bœuf", "bœuf haché maigre", "crabe", "crevette", 
+            "dinde", "escalopes de poulet", "filet de poisson", "filet de porc", "jambon", 
+            "morceau de poulet blanc", "palourdes", "poisson blanc ferme", "poitrine de boeuf", 
+            "poitrines de poulet", "porc", "poulet", "saucisse", "saumon", "thon", "viande hachée", "steak"
+        ],
+        "dairy_eggs": [
+            "babeurre", "beurre", "beurre non salé", "blanc d'oeuf", "blancs d'œufs", 
+            "crème", "crème condensée", "crème fouettée", "crème fraîche", "crème légère", 
+            "crème sure commerciale", "fromage", "fromage blanc", "fromage cheddar", 
+            "fromage à la crème", "jaune d'oeuf", "jaunes d'oeuf", "lait", "lait condensé", 
+            "lait de coco", "lait en poudre", "œuf", "Œufs", "yaourt", "yaourt nature non gras"
+        ],
+        "herbs_spices": [
+            "aneth", "aneth frais", "anis", "basilic", "basilic doux", "cannelle", "cardamome", 
+            "cayenne", "ciboulette", "coriandre", "cumin", "curcuma", "curry", "estragon", 
+            "feuille de laurier", "gingembre en poudre", "marjolaine", "origan", "paprika", 
+            "persil", "persil frais", "piment", "poivre", "poivre blanc", "poivre de Cayenne", 
+            "romarin", "safran", "sel", "thym", "vanille"
+        ],
+        "grains_cereals": [
+            "Arborio", "avoine", "avoine de cuisson", "avoine roulée", "biscuits", "chapelure", 
+            "corn flakes", "farine", "farine de blé entier", "farine de maïs", "gruau", 
+            "macaroni", "nouilles", "nouilles aux œufs", "orge perlée", "pâtes", "riz", 
+            "riz brun", "riz sauvage", "spaghetti", "pain"
+        ],
+        "legumes_nuts": [
+            "amande", "amandes", "arachide", "arachides", "haricots", "haricots blancs", 
+            "haricots de Lima", "haricots pinto", "haricots rouges", "haricots verts", 
+            "lentilles", "noix", "noix de cajou", "noix de coco", "noix de pécan", "pacanes", 
+            "petits pois", "pois verts", "soja"
+        ],
+        "baking_sweets": [
+            "bicarbonate de soude", "cacao", "cacao en poudre", "chocolat", "chocolat au lait", 
+            "chocolat non sucré", "confiture", "gâteau", "gâteau au chocolat", "gélatine", 
+            "guimauves", "miel", "sucre", "sucre en poudre", "vanille", "mélasse"
+        ],
+        "condiments_sauces": [
+            "barbecue sauce", "ketchup", "moutarde", "sauce", "sauce au poivre", 
+            "sauce tomate", "sauce worcestershire", "vinaigre", "vinaigre de cidre"
+        ],
+        "beverages": [
+            "bière", "café", "coca-cola", "jus d'ananas", "jus de citron", "jus de tomate", 
+            "thé", "vin blanc", "vin rouge"
+        ],
+        "canned_packaged": [
+            "bouillon de bœuf", "bouillon de poulet", "concentré de jus d'orange", 
+            "conserve d'abricot", "cornichons", "purée de tomates", "soupe aux champignons"
+        ],
+        "miscellaneous": [
+            "colorant alimentaire", "extrait de vanille", "levure", "poudre à pâte", 
+            "sel de céleri", "semoule"
+        ]
+    }
+        
+    # Categorize ingredients
+    categorized = {key: [] for key in categories}
+    uncategorized = []
+    
+    for ingredient in cleaned:
+        lower_ing = ingredient.lower()
+        found = False
+        
+        for category, keywords in categories.items():
+            if any(keyword in lower_ing for keyword in keywords):
+                categorized[category].append(ingredient)
+                found = True
+                break
+                
+        if not found:
+            uncategorized.append(ingredient)
+    
+    # Sort each category alphabetically
+    for category in categorized:
+        categorized[category] = sorted(categorized[category], key=lambda x: x.lower())
+    
+    return categorized, uncategorized
+
+
+
+def parse_quantity_min_1(qty_str):
+    try:
+        qty_str = qty_str.strip()
+        if re.match(r'^\d+ \d+/\d+$', qty_str):  # e.g., "2 1/4"
+            parts = qty_str.split()
+            value = float(parts[0]) + float(Fraction(parts[1]))
+        elif re.match(r'^\d+/\d+$', qty_str):  # e.g., "1/2"
+            value = float(Fraction(qty_str))
+        else:
+            match = re.match(r'^([\d.]+)', qty_str)
+            if match:
+                value = float(match.group(1))
+            else:
+                return 0
+        return max(1, int(round(value)))  # Ensure minimum 1
+    except:
+        return 0
+
+def extract_quantities(meal_plan, categorized):
+    quantities = {
+        "meat_seafood": defaultdict(list),
+        "dairy_eggs": defaultdict(list),
+        "fruits_vegetables": defaultdict(list)
+    }
+
+    for day, meals in meal_plan.items():
+        for meal in meals:
+            ingredient_lines = meal.get("ingredients", [])
+
+            for line in ingredient_lines:
+                line_lower = line.lower()
+
+                for category in quantities:
+                    for item in categorized.get(category, []):
+                        if item.lower() in line_lower:
+                            # Try to extract quantity with unit first
+                            match = re.search(r"(\d+(?:[.,]\d+)?)(?:\s*)(pt|lb|kg|g|ml|l|cuillères?|tsp|oz|pkg|tranches?)?", line_lower, re.IGNORECASE)
+                            if match:
+                                number_str = match.group(1).replace(',', '.')
+                                unit = match.group(2).lower() if match.group(2) else "count"  # default to "count" if no unit
+                                try:
+                                    number_val = float(number_str)
+                                    quantities[category][item].append((number_val, unit))
+                                except ValueError:
+                                    pass  # skip invalid number
+                            else:
+                                # No quantity found at all — fallback to default count = 1
+                                quantities[category][item].append((1.0, "count"))
+
+    return quantities
+
+def flatten_quantities(quantities):
+    flattened = {}
+
+    for category, items in quantities.items():
+        flattened[category] = {}
+
+        for item, qty_list in items.items():
+            if category == "meat_seafood":
+                total_grams = 0
+                total_packs = 0
+
+                for value, unit in qty_list:
+                    unit = unit.lower()
+                    if unit in ["g", "gram", "grams"]:
+                        total_grams += value
+                    elif unit in ["kg", "kilogram", "kilograms"]:
+                        total_grams += value * 1000
+                    elif unit in ["lb", "lbs", "pound", "pounds"]:
+                        total_grams += value * 453.592
+                    else:
+                        # Treat as pack (pkg, tranches, etc.)
+                        total_packs += value
+
+                result = {}
+                if total_grams > 0:
+                    result["grams"] = int(round(total_grams))
+                if total_packs > 0:
+                    result["packs"] = int(round(total_packs))
+
+                flattened[category][item] = result
+
+            else:
+                # For other categories, just sum values regardless of unit
+                total = defaultdict(float)
+                for value, unit in qty_list:
+                    total[unit] += value
+                flattened[category][item] = {
+                    unit: int(round(amount)) for unit, amount in total.items()
+                }
+
+    return flattened
+
+
+def normalize_name(name):
+    return unicodedata.normalize("NFKD", name).encode("ASCII", "ignore").decode().lower().strip()
+
+def subtract_inventory(shopping_list, inventory):
+    # Flatten inventory into normalized name → (quantity, unit)
+    inv_map = {}
+
+    for item in inventory.get("grocery", []) + inventory.get("fresh_produce", []):
+        name = normalize_name(item["name"])
+        quantity = float(item["quantity"].replace(',', '.'))
+        unit = item["type_quantity"].lower()
+        inv_map[name] = (quantity, unit)
+
+    # Adjust the shopping list
+    for category, items in shopping_list.items():
+        for item, data in list(items.items()):  # Use list() to allow removal
+            norm_item = normalize_name(item)
+
+            if norm_item in inv_map:
+                inv_qty, inv_unit = inv_map[norm_item]
+
+                # Meat/seafood special case
+                if category == "meat_seafood":
+                    if "grams" in data and inv_unit in ["g", "gram", "grams"]:
+                        data["grams"] = max(0, data["grams"] - inv_qty)
+                        if data["grams"] == 0:
+                            del data["grams"]
+                    if "packs" in data and inv_unit in ["pack", "packs", "pkg"]:
+                        data["packs"] = max(0, data["packs"] - inv_qty)
+                        if data["packs"] == 0:
+                            del data["packs"]
+
+                else:
+                    for unit in list(data.keys()):
+                        if normalize_name(unit) == normalize_name(inv_unit) or (unit == "count" and inv_unit == ""):
+                            data[unit] = max(0, data[unit] - inv_qty)
+                            if data[unit] == 0:
+                                del data[unit]
+
+            # Remove item if it's now empty
+            if not data:
+                del shopping_list[category][item]
+
+    return shopping_list
+
 @app.route('/shopping_list', methods=['POST'])
 def get_shopping_list():
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
-    meal_plan = request.get_json()
-    shopping_list = clean_and_categorize_ingredients(meal_plan)
-    return jsonify(shopping_list, flatten_quantities(extract_quantities(meal_plan, shopping_list[0])))
+
+    data = request.get_json()
+
+    meal_plan = data.get("meal_plan")
+    inventory = data.get("inventory", {})
+
+    if not meal_plan:
+        return jsonify({"error": "Missing meal_plan in request"}), 400
+
+    categorized, _ = clean_and_categorize_ingredients(meal_plan)
+    extracted = extract_quantities(meal_plan, categorized)
+    flattened = flatten_quantities(extracted)
+    if (inventory != {}):
+        final_list = subtract_inventory(flattened, inventory)
+    else:
+        final_list = flattened
+    return jsonify({
+        "categorized": categorized,
+        "shopping_list": final_list
+    })
 
 @app.route('/custom_meal_plan', methods=['POST'])
 def get_custom_meal_plan():
