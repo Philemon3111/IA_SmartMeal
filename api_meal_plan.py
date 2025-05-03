@@ -624,31 +624,34 @@ def get_optimized_meal_plan():
 @app.route('/optimized_preferences_meal_plan', methods=['POST'])
 def get_optimized_preferences_meal_plan():
     if not request.is_json:
-        return jsonify({"error": "Request must be JSON"}), 400
+        return jsonify({"error": "Request must be JSON"}), 400    
     
     data = request.get_json()
-    
+
+    preferences = data.get("preferences")
+    inventory = data.get("inventory", {})
+
     # Valider les champs requis
     required_fields = ["inventory_id", "user_id", "grocery", "fresh_produce"]
     for field in required_fields:
-        if field not in data:
+        if field not in inventory:
             return jsonify({"error": "Missing required field: {field}"}), 400
     
-    if not isinstance(data["inventory_id"], int):
+    if not isinstance(inventory["inventory_id"], int):
         return jsonify({"error": "inventory_id must be an integer"}), 400
     
-    if not isinstance(data["user_id"], int):
+    if not isinstance(inventory["user_id"], int):
         return jsonify({"error": "user_id must be an integer"}), 400
     
-    if not isinstance(data["grocery"], list):
+    if not isinstance(inventory["grocery"], list):
         return jsonify({"error": "grocery must be a list"}), 400
     
-    if not isinstance(data["fresh_produce"], list):
+    if not isinstance(inventory["fresh_produce"], list):
         return jsonify({"error": "fresh_produce must be a list"}), 400
     
     # Extraire les ingrédients de grocery et fresh_produce
     inventory_ingredients = []
-    for item in data["grocery"] + data["fresh_produce"]:
+    for item in inventory["grocery"] + inventory["fresh_produce"]:
         if not isinstance(item, dict) or "name" not in item:
             return jsonify({"error": "Each grocery or fresh_produce item must be a dictionary with a 'name' field"}), 400
         inventory_ingredients.append(item["name"])
@@ -659,15 +662,15 @@ def get_optimized_preferences_meal_plan():
     print(f"Ingrédients de l'inventaire : {inventory_ingredients}")
     
     # Récupérer les préférences via l'API
-    user_id = data["user_id"]
-    api_url = f"https://smartmeal-backend.onrender.com/preferences/id?user_id={user_id}"
-    try:
-        response = requests.get(api_url, timeout=5)
-        response.raise_for_status()  # Lève une exception pour les codes d'erreur HTTP
-        preferences = response.json()
-        print(f"Préférences récupérées pour user_id {user_id}: {preferences}")
-    except requests.exceptions.RequestException as e:
-        return jsonify({"error": f"Failed to fetch preferences: {str(e)}"}), 500
+    # user_id = data["user_id"]
+    # api_url = f"https://smartmeal-backend.onrender.com/preferences/id?user_id={user_id}"
+    # try:
+    #     response = requests.get(api_url, timeout=5)
+    #     response.raise_for_status()  # Lève une exception pour les codes d'erreur HTTP
+    #     preferences = response.json()
+    #     print(f"Préférences récupérées pour user_id {user_id}: {preferences}")
+    # except requests.exceptions.RequestException as e:
+    #     return jsonify({"error": f"Failed to fetch preferences: {str(e)}"}), 500
     
     # Valider les préférences
     required_fields = ["allergy", "diet", "goal", "number_of_meals", "grocery_day"]
