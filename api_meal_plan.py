@@ -549,7 +549,7 @@ def get_custom_meal_plan():
     required_fields = ["allergy", "diet", "goal", "number_of_meals", "grocery_day"]
     for field in required_fields:
         if field not in preferences:
-            return jsonify({"error": f"Missing required field: {field}"}), 400
+            return jsonify({"error": "Missing required field: {field}"}), 400
     
     if not isinstance(preferences["allergy"], dict):
         return jsonify({"error": "Allergy must be a dictionary"}), 400
@@ -635,7 +635,7 @@ def get_optimized_preferences_meal_plan():
     required_fields = ["inventory_id", "user_id", "grocery", "fresh_produce"]
     for field in required_fields:
         if field not in inventory:
-            return jsonify({"error": "Missing required field: {field}"}), 400
+            return jsonify({"error": f"Missing required field: {field}"}), 400
     
     if not isinstance(inventory["inventory_id"], int):
         return jsonify({"error": "inventory_id must be an integer"}), 400
