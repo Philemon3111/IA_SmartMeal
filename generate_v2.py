@@ -11,7 +11,7 @@ import random
 import pickle
 
 # Charger le fichier JSON
-with open('recipes_fr.json', 'r', encoding='utf-8') as file:
+with open('recipes_fix.json', 'r', encoding='utf-8') as file:
     data = json.load(file)
 
 # Listes de mots-clés pour classification
@@ -139,14 +139,14 @@ model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
 model.fit(X, y, epochs=100, batch_size=32, validation_split=0.2, verbose=1)
 
 # Sauvegarder le modèle
-model.save("meal_plan_model_v2.keras")
-print("Modèle sauvegardé sous 'meal_plan_model_v2.keras'")
+model.save("meal_plan_model_fix.keras")
+print("Modèle sauvegardé sous 'meal_plan_model_fix.keras'")
 
 # Sauvegarder le DataFrame, l'encoder et le scaler
-df.to_pickle("recipes_df_v2.pkl")
-with open("label_encoder_v2.pkl", "wb") as f:
+df.to_pickle("recipes_fix.pkl")
+with open("label_fix.pkl", "wb") as f:
     pickle.dump(encoder, f)
-with open("scaler_v2.pkl", "wb") as f:
+with open("scaler_fix.pkl", "wb") as f:
     pickle.dump(scaler, f)
 print("DataFrame, encoder et scaler sauvegardés")
 
