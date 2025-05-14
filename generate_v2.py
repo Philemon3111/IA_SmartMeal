@@ -11,7 +11,7 @@ import random
 import pickle
 
 # Charger le fichier JSON
-with open('recipes_fix.json', 'r', encoding='utf-8') as file:
+with open('recipeswithvegan.json', 'r', encoding='utf-8') as file:
     data = json.load(file)
 
 # Listes de mots-clés pour classification
