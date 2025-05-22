@@ -7,49 +7,86 @@ import numpy as np
 import tensorflow as tf
 import pickle
 import random
-import requests
+# import requests
 from flask import Flask, jsonify, request
 import re
 from collections import defaultdict
 from fractions import Fraction
 import unicodedata
+from fuzzywuzzy import fuzz
 
 app = Flask(__name__)
 
 # Charger les données sauvegardées
+dir = "versiontest/"
 try:
-    df = pd.read_pickle("recipes_fix.pkl")
-    with open("label_fix.pkl", "rb") as f:
+    df = pd.read_pickle(dir + "recipes.pkl")
+    with open(dir + "label.pkl", "rb") as f:
         encoder = pickle.load(f)
-    with open("scaler_fix.pkl", "rb") as f:
+    with open(dir + "scaler.pkl", "rb") as f:
         scaler = pickle.load(f)
-    model = tf.keras.models.load_model("meal_plan_model_fix.keras")
+    model = tf.keras.models.load_model(dir + "meal_plan.keras")
     print("Model and data loaded successfully")
 except FileNotFoundError as e:
     print(f"Error: Missing file - {e}")
     exit(1)
 
 # Liste des ingrédients non-végétariens (viandes, poissons, gélatine)
-NON_VEGETARIAN_INGREDIENTS = [
-    "meat", "beef", "pork", "chicken", "turkey", "fish", "salmon", "tuna", "shrimp", "crab", "lobster",
-    "viande", "bœuf", "boeuf", "porc", "poulet", "dinde", "poisson", "saumon", "thon", "crevette", "crabe",
-    "homard", "gelatin", "gélatine", "gelatine"
-]
 
-# Liste des ingrédients exclus pour le régime végan (laitiers, œufs, miel)
-VEGAN_EXCLUDED_INGREDIENTS = [
-    "milk", "cheese", "cream", "yogurt", "egg", "eggs", "honey",
-    "lait", "fromage", "crème", "creme", "yaourt", "œuf", "oeuf", "œufs", "oeufs", "miel"
-]
+NO_PORC_EXCLUDED_INGREDIENTS= ["porc","jambon","bacon","saucisses de porc","lard","lardons","pate de porc","rillettes de porc",
+                               "salami de porc","chorizo de porc","prosciutto","pancetta","cotelettes de porc","roti de porc",
+                               "echine de porc","filet de porc","saindoux","graisse de porc","gelatine de porc","couenne de porc",
+                               "pieds de porc","tete de porc","sauces a base de porc","bouillon de porc","charcuterie contenant du porc"]
+
+KETO_EXCLUDED_INGREDIENT = ["ble","riz","mais","orge","avoine","quinoa","sarrasin","haricots","lentilles","pois chiches","pois",
+                            "soja","bananes","raisins","mangues","ananas","pommes","oranges","poires","fruits secs","jus de fruits",
+                            "pommes de terre","patates douces","panais","carottes","betteraves","sucre","miel","sirop d'erable",
+                            "sirop d'agave","sirop de mais","maltodextrine","dextrose","bonbons","biscuits","chips","craquelins",
+                            "barres de cereales","ketchup","sauce barbecue","sauce teriyaki","sodas","boissons energetiques","bieres",
+                            "vins sucres","lait","yaourts sucres","cremes glacees","fromages fondus sucres","huile de canola",
+                            "huile de mais","huile de soja","margarine","graisses trans","amidon","farine de ble","farine de mais",
+                            "aliments panes","sirop de glucose-fructose","maltitol","sorbitol"]
+
+PALEO_EXCLUDED_INGREDIENT = ["ble","riz","mais","orge","avoine","quinoa","sarrasin","seigle","haricots","lentilles","pois chiches",
+                             "pois","soja","tofu","lait","fromage","yaourt","creme","beurre","creme glacee","sucre","sirop de mais",
+                             "sirop d'agave","miel artificiel","aspartame","saccharine","pommes de terre","huile de canola",
+                             "huile de mais","huile de soja","huile de coton","huile de carthame","margarine","bonbons","biscuits",
+                             "gateaux","patisseries","chips","craquelins","sodas","jus de fruits","bieres","vins sucres",
+                             "boissons energetiques","aliments frits","fast-food","sauces transformees","ketchup",
+                             "mayonnaise industrielle","farine de ble","farine de mais","amidon","sirop de glucose-fructose",
+                             "maltodextrine","dextrose","proteines de soja","proteines de lactoserum","lactoserum","caseine"]
+
 
 # Dictionnaire pour les allergènes avec mots-clés précis
 ALLERGEN_KEYWORDS = {
-    "lait": ["milk", "cheese", "cream", "yogurt", "whey"],
-    "œufs": ["egg", "eggs", "mayonnaise"],
-    "moutarde": ["mustard", "mustard seed"],
-    "cacahuètes": ["peanut", "peanut oil", "peanut butter"],
-    "fruits à coque": ["almond", "hazelnut", "walnut", "cashew", "pistachio"]
+    "lait": ["milk", "cheese", "cream", "yogurt", "whey", "lait", "fromage", "creme", "yaourt", "lactoserum", "petit-lait", "caseine", "lactose", "beurre", "ghee", "creme glacee", "lait en poudre", "lait condense", "lait evapore"],
+    "oeufs": ["egg", "eggs", "mayonnaise", "oeuf", "oeufs", "albumen", "ovoproduit", "lecitine d'oeuf", "pate d'oeuf", "jaune d'oeuf", "blanc d'oeuf"],
+    "moutarde": ["mustard", "mustard seed", "moutarde", "graine de moutarde", "poudre de moutarde", "huile de moutarde"],
+    "cacahuetes": ["peanut", "peanut oil", "peanut butter", "cacahuete", "huile de cacahuete", "beurre de cacahuete", "arachide", "huile d'arachide"],
+    "fruits a coque": ["almond", "hazelnut", "walnut", "cashew", "pistachio", "amande", "noisette", "noix", "noix de cajou", "pistache", "noix de pecan", "noix du bresil", "noix de macadamia", "pignon de pin", "chataigne", "huile d'amande", "huile de noisette", "beurre d'amande", "beurre de noix de cajou"],
+    "gluten": ["wheat", "barley", "rye", "oats", "ble", "orge", "seigle", "avoine", "farine de ble", "farine d'orge", "farine de seigle", "malt", "amidon de ble", "semoule", "couscous", "bulgur", "epautre", "kamut", "triticale"],
+    "soja": ["soy", "soya", "soybean", "soja", "graine de soja", "huile de soja", "lecitine de soja", "tofu", "tempeh", "miso", "sauce soja", "tamari", "edamame", "proteine de soja", "lait de soja", "creme de soja"],
+    "poisson": ["fish", "salmon", "tuna", "cod", "poisson", "saumon", "thon", "morue", "anchois", "sardine", "hareng", "maquereau", "surimi", "caviar", "huile de poisson"],
+    "crustaces": ["shrimp", "crab", "lobster", "crevette", "crabe", "homard", "ecrevisse", "langoustine", "moule", "huitre", "coquille saint-jacques", "calmar", "poulpe"],
+    "sesame": ["sesame", "sesame seed", "Kuhlschmied", "tahini", "huile de sesame", "graines de sesame", "pate de sesame"],
+    "celeri": ["celery", "celeri", "celeri-rave", "graine de celeri", "jus de celeri"]
 }
+
+chemin_vegan = "alimentliste/non_vegan.json"
+ner_vegan = None
+# Vérifier si le fichier existe
+if os.path.exists(chemin_vegan):
+    # Ouvrir et lire le fichier JSON
+    with open(chemin_vegan, 'r', encoding='utf-8') as fichier:
+        ner_vegan = json.load(fichier)
+
+chemin_vegan = "alimentliste/non_vegetarien.json"
+ner_vegetarien = None
+# Vérifier si le fichier existe
+if os.path.exists(chemin_vegan):
+    # Ouvrir et lire le fichier JSON
+    with open(chemin_vegan, 'r', encoding='utf-8') as fichier:
+        ner_vegetarien = json.load(fichier)
 
 # Normaliser les ingrédients au chargement
 def normalize_ingredient(ingredient):
@@ -68,7 +105,7 @@ df["ingredients"] = df["ingredients"].apply(lambda x: [normalize_ingredient(ing)
 
 # Fonction pour vérifier si une recette respecte les contraintes
 def is_recipe_valid(recipe, allergies, diet, max_calories=None):
-    ingredients = [ing.lower() for ing in recipe["ingredients"]]
+    ingredients = [ing for ing in recipe["NER"]]
     
     # Vérifier les allergènes
     for allergen, is_allergic in allergies.items():
@@ -79,19 +116,40 @@ def is_recipe_valid(recipe, allergies, diet, max_calories=None):
                 return False
     
     # Vérifier le régime végétarien
-    if diet.lower() == "végétarien":
+    if diet.lower() == "végétarien" or diet.lower() == "vegetarian":
         for ing in ingredients:
-            if any(non_veg in ing for non_veg in NON_VEGETARIAN_INGREDIENTS):
+            if any(non_veg in ing for non_veg in ner_vegetarien):
                 print(f"Recette '{recipe['title']}' rejetée pour ingrédient non-végétarien : {ing}")
                 return False
     
     # Vérifier le régime végan
     if diet.lower() == "végan":
         for ing in ingredients:
-            if any(non_vegan in ing for non_vegan in NON_VEGETARIAN_INGREDIENTS + VEGAN_EXCLUDED_INGREDIENTS):
+            if any(non_vegan in ing for non_vegan in ner_vegan + ner_vegetarien):
                 print(f"Recette '{recipe['title']}' rejetée pour ingrédient non-végan : {ing}")
                 return False
+            
+    # Vérifier le régime sans porc
+    if diet.lower() == "sans porc":
+        for ing in ingredients:
+            if any(non_sporc in ing for non_sporc in NO_PORC_EXCLUDED_INGREDIENTS):
+                print(f"Recette '{recipe['title']}' rejetée pour ingrédient sans porc : {ing}")
+                return False
     
+    # Vérifier le régime keto
+    if diet.lower() == "keto":
+        for ing in ingredients:
+            if any(non_keto in ing for non_keto in KETO_EXCLUDED_INGREDIENT):
+                print(f"Recette '{recipe['title']}' rejetée pour ingrédient non-keto : {ing}")
+                return False
+    
+    # Vérifier le régime végan
+    if diet.lower() == "paleo":
+        for ing in ingredients:
+            if any(non_paleo in ing for non_paleo in PALEO_EXCLUDED_INGREDIENT):
+                print(f"Recette '{recipe['title']}' rejetée pour ingrédient non-paléo : {ing}")
+                return False
+
     # Vérifier les calories
     if max_calories and recipe["calories"] > max_calories:
         print(f"Recette '{recipe['title']}' rejetée pour calories : {recipe['calories']} > {max_calories}")
@@ -99,9 +157,33 @@ def is_recipe_valid(recipe, allergies, diet, max_calories=None):
     
     return True
 
+def normalize_string(s):
+    """Normalise une chaîne : supprime accents, met en minuscules, gère singulier/pluriel."""
+    # Supprimer accents
+    s = ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
+    # Mettre en minuscules
+    s = s.lower().strip()
+    # Supprimer pluriels simples (ex. "oignons" -> "oignon")
+    s = re.sub(r's$', '', s)
+    return s
+
+def prepare_inventory_ingredients(inventory):
+    """Extrait et nettoie les ingrédients de l'inventaire."""
+    ingredients = []
+    if inventory:
+        for category in ['grocery', 'fresh_produce']:
+            if category in inventory:
+                for item in inventory[category]:
+                    name = item.get('name', '')
+                    if name:
+                        normalized_name = normalize_string(name)
+                        if normalized_name not in ingredients:
+                            ingredients.append(normalized_name)
+    return ingredients
+
 # Fonction pour générer un plan de repas
 def generate_meal_plan(preferences=None, inventory_ingredients=None):
-    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     meal_plan = {}
     weekly_selected_indices = set()
     
@@ -113,17 +195,15 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None):
         grocery_day = preferences.get("grocery_day", "Monday")
         max_calories = preferences.get("max_calories", None)
         
+        if not isinstance(number_of_meals, int) or number_of_meals < 1:
+            print("Erreur : number_of_meals doit être un entier positif")
+            return {"error": "Invalid number_of_meals, must be a positive integer"}
+        
         try:
             start_idx = days.index(grocery_day)
             days = days[start_idx:] + days[:start_idx]
         except ValueError:
             pass
-        
-        if goal.lower() == "lose weight" and max_calories is None:
-            max_calories = np.percentile(df["calories"], 90)
-            print(f"Seuil de calories pour 'lose weight' (90e percentile) : {max_calories}")
-        elif max_calories is not None:
-            print(f"Seuil de calories spécifié par l'utilisateur : {max_calories}")
         
         valid_recipes = df[df.apply(lambda row: is_recipe_valid(row, allergies, diet, max_calories), axis=1)]
         print(f"Nombre de recettes valides après filtrage : {len(valid_recipes)}")
@@ -140,53 +220,69 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None):
             print(f"Raisons du filtrage vide : {reasons}")
             return {"error": "No recipes match the preferences", "details": reasons}
         
-        meals_per_day = max(1, number_of_meals // len(days))
-        remaining_meals = number_of_meals % len(days)
+        meals_per_day = number_of_meals
+        print(f"Nombre de repas par jour : {meals_per_day}")
     else:
         valid_recipes = df
-        number_of_meals = 6
-        meals_per_day = 1
-        remaining_meals = 0
-    
-    # Calculer les scores d'ingrédients si inventory_ingredients est fourni
+        meals_per_day = random.randint(1, 2)
+        print(f"Nombre de repas par jour (par défaut) : {meals_per_day}")
+
+    # Calculate ingredient scores if inventory_ingredients is provided
     ingredient_scores = None
     if inventory_ingredients:
         ingredient_scores = np.zeros(len(valid_recipes))
-        inventory_ingredients = [normalize_ingredient(ing) for ing in inventory_ingredients]
         for idx, recipe in valid_recipes.iterrows():
-            recipe_ingredients = [ing.lower() for ing in recipe["ingredients"]]
-            matches = sum(1 for inv_ing in inventory_ingredients if any(inv_ing in recipe_ing for recipe_ing in recipe_ingredients))
+            recipe_ingredients = [normalize_string(ing) for ing in recipe["ingredients"]]
+            matches = 0
+            matched_ingredients = []
+            for inv_ing in inventory_ingredients:
+                for recipe_ing in recipe_ingredients:
+                    if fuzz.partial_ratio(inv_ing, recipe_ing) > 80:
+                        matches += 1
+                        matched_ingredients.append((inv_ing, recipe_ing))
+                        break
             ingredient_scores[valid_recipes.index.get_loc(recipe.name)] = matches
-        # Normaliser les scores (0 à 1)
+            # print(f"Recette '{recipe['title']}': {matches} correspondances -> {matched_ingredients}")
         max_score = ingredient_scores.max() if ingredient_scores.max() > 0 else 1
         ingredient_scores = ingredient_scores / max_score
-        print(f"Scores d'ingrédients calculés : min={ingredient_scores.min()}, max={ingredient_scores.max()}")
+        # print(f"Scores d'ingrédients calculés : min={ingredient_scores.min()}, max={ingredient_scores.max()}, max_score brut={max_score}")
 
-    for i, day in enumerate(days):
-        num_meals = meals_per_day + (1 if i < remaining_meals else 0) if preferences else random.randint(1, 2)
+    valid_meal_types = list(encoder.classes_)
+    print(f"Valid meal types for selection: {valid_meal_types}")
+
+    for day in days:
+        num_meals = meals_per_day
         meals = []
         daily_selected_indices = set()
-        
+
         for _ in range(num_meals):
-            type_plat = random.choice(["entrée", "plat principal", "dessert"])
+            type_plat = random.choice(valid_meal_types)
             try:
                 type_plat_encoded = encoder.transform([type_plat])[0]
-                X_input = scaler.transform([[type_plat_encoded, random.randint(200, 800), random.randint(15, 60)]])
+                # Use dataset ranges for all 6 features
+                X_input = scaler.transform([[
+                    type_plat_encoded,
+                    random.uniform(df["calories"].min(), df["calories"].max()),
+                    random.uniform(df["lipide"].min(), df["lipide"].max()),
+                    random.uniform(df["glucide"].min(), df["glucide"].max()),
+                    random.uniform(df["proteine"].min(), df["proteine"].max()),
+                    random.uniform(df["fibre"].min(), df["fibre"].max())
+                ]])
                 prediction = model.predict(X_input, verbose=0)[0]
                 print(f"Taille de prediction pour {type_plat} le {day}: {len(prediction)}")
                 
                 if preferences or inventory_ingredients:
                     valid_indices = list(valid_recipes.index)
+                    valid_indices = [i for i in valid_indices if df.iloc[i]["type_plat"] == type_plat]
                     print(f"Taille de valid_indices pour {type_plat} le {day}: {len(valid_indices)}")
                     if len(valid_indices) == 0:
                         print(f"Aucune recette valide pour {type_plat} le {day}")
                         continue
-                    # Vérifier les indices valides
                     valid_indices = [i for i in valid_indices if i < len(df)]
                     if len(valid_indices) == 0:
                         print(f"Aucun indice valide après vérification pour {type_plat} le {day}")
                         continue
-                    valid_probs = prediction[valid_indices][:len(df)-1]  # -1 pour limiter à 998
+                    valid_probs = prediction[valid_indices]
                     print(f"Taille de valid_probs pour {type_plat} le {day}: {len(valid_probs)}")
                     if len(valid_probs) != len(valid_indices):
                         print(f"Erreur : valid_probs ({len(valid_probs)}) et valid_indices ({len(valid_indices)}) ont des tailles différentes")
@@ -196,30 +292,31 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None):
                         recette_index = random.choice(valid_indices)
                     else:
                         valid_probs = valid_probs / valid_probs.sum()
-                        # Ajuster les probabilités avec les scores d'ingrédients
                         if ingredient_scores is not None:
                             valid_scores = ingredient_scores[:len(valid_indices)]
-                            valid_probs = valid_probs * (0.5 + 0.5 * valid_scores)  # Combiner probabilités et scores
-                            valid_probs = valid_probs / valid_probs.sum()  # Renormaliser
+                            valid_probs = valid_probs * (0.5 + 0.5 * valid_scores)
+                            valid_probs = valid_probs / valid_probs.sum()
                         sequential_indices = list(range(len(valid_indices)))
                         for _ in range(10):
+                            # print(valid_probs)
                             seq_index = np.random.choice(sequential_indices, p=valid_probs)
                             recette_index = valid_indices[seq_index]
-                            if recette_index not in weekly_selected_indices:
+                            if recette_index not in daily_selected_indices:
                                 break
                         else:
                             seq_index = np.random.choice(sequential_indices, p=valid_probs)
                             recette_index = valid_indices[seq_index]
                 else:
-                    valid_indices = list(range(len(df)-1))  # -1 pour 0 à 998
+                    valid_indices = list(range(len(df)))
+                    valid_indices = [i for i in valid_indices if df.iloc[i]["type_plat"] == type_plat]
                     print(f"Taille de valid_indices pour {type_plat} le {day}: {len(valid_indices)}")
                     if len(prediction) == 0:
                         print(f"Aucune prédiction disponible pour {type_plat} le {day}")
                         continue
-                    prediction = prediction[:len(df)-1] / prediction.sum()  # -1 pour 0 à 998
+                    prediction = prediction / prediction.sum()
                     for _ in range(10):
                         recette_index = np.random.choice(valid_indices, p=prediction)
-                        if recette_index not in weekly_selected_indices:
+                        if recette_index not in daily_selected_indices:
                             break
                     else:
                         recette_index = np.random.choice(valid_indices, p=prediction)
@@ -228,16 +325,22 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None):
                     daily_selected_indices.add(recette_index)
                     weekly_selected_indices.add(recette_index)
                     recette = df.iloc[recette_index]
+                    # print(recette)
                     meals.append({
                         "items": [recette["title"] or "Plat sans titre"],
                         "calories": int(recette["calories"]),
-                        "servings": int(recette["servings"]),
-                        "time": int(recette["time"]),
+                        "nutriments": {
+                            "lipide": float(recette["lipide"]),
+                            "glucide": float(recette["glucide"]),
+                            "proteine": float(recette["proteine"]),
+                            "fibre": float(recette["fibre"])
+                        },
                         "ingredients": recette["ingredients"],
                         "preparation": recette["instructions"],
-                        "NER": recette["NER"]
+                        "NER": recette["NER"],
+                        "type": recette["type_plat"]
                     })
-                    print(f"Recette sélectionnée : {recette['title']} (index {recette_index}) pour {type_plat} le {day}")
+                    # print(f"Recette sélectionnée : {recette['title']} (index {recette_index}) pour {type_plat} le {day}")
                 else:
                     print(f"Index {recette_index} déjà utilisé ou invalide pour {type_plat} le {day}")
             except (ValueError, IndexError) as e:
@@ -249,10 +352,10 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None):
     return meal_plan
 
 # Routes existantes
-@app.route('/meal_plan', methods=['GET'])
-def get_meal_plan():
-    meal_plan = generate_meal_plan({})
-    return jsonify(meal_plan)
+# @app.route('/meal_plan', methods=['GET'])
+# def get_meal_plan():
+#     meal_plan = generate_meal_plan({})
+#     return jsonify(meal_plan)
 
 # def clean_and_categorize_ingredients(meal_plan):
 #     ingredients_list = set()
@@ -539,42 +642,42 @@ def get_meal_plan():
 #         "shopping_list": final_list
 #     })
 
-@app.route('/custom_meal_plan', methods=['POST'])
-def get_custom_meal_plan():
-    if not request.is_json:
-        return jsonify({"error": "Request must be JSON"}), 400
+# @app.route('/custom_meal_plan', methods=['POST'])
+# def get_custom_meal_plan():
+#     if not request.is_json:
+#         return jsonify({"error": "Request must be JSON"}), 400
     
-    preferences = request.get_json()
+#     preferences = request.get_json()
     
-    # Valider les préférences
-    required_fields = ["allergy", "diet", "goal", "number_of_meals", "grocery_day"]
-    for field in required_fields:
-        if field not in preferences:
-            return jsonify({"error": f"Missing required field: {field}"}), 400
+#     # Valider les préférences
+#     required_fields = ["allergy", "diet", "goal", "number_of_meals", "grocery_day"]
+#     for field in required_fields:
+#         if field not in preferences:
+#             return jsonify({"error": f"Missing required field: {field}"}), 400
     
-    if not isinstance(preferences["allergy"], dict):
-        return jsonify({"error": "Allergy must be a dictionary"}), 400
+#     if not isinstance(preferences["allergy"], dict):
+#         return jsonify({"error": "Allergy must be a dictionary"}), 400
     
-    if preferences["diet"].lower() not in ["végan", "végétarien", "none"]:
-        return jsonify({"error": "Unsupported diet"}), 400
+#     if preferences["diet"].lower() not in ["végan", "végétarien", "none"]:
+#         return jsonify({"error": "Unsupported diet"}), 400
     
-    if preferences["goal"].lower() not in ["lose weight", "maintain", "gain weight"]:
-        return jsonify({"error": "Unsupported goal"}), 400
+#     if preferences["goal"].lower() not in ["lose weight", "maintain", "gain weight"]:
+#         return jsonify({"error": "Unsupported goal"}), 400
     
-    if not isinstance(preferences["number_of_meals"], int) or preferences["number_of_meals"] < 1:
-        return jsonify({"error": "Invalid number_of_meals"}), 400
+#     if not isinstance(preferences["number_of_meals"], int) or preferences["number_of_meals"] < 1:
+#         return jsonify({"error": "Invalid number_of_meals"}), 400
     
-    if "max_calories" in preferences:
-        if not isinstance(preferences["max_calories"], (int, float)) or preferences["max_calories"] <= 0:
-            return jsonify({"error": "Invalid max_calories"}), 400
+#     if "max_calories" in preferences:
+#         if not isinstance(preferences["max_calories"], (int, float)) or preferences["max_calories"] <= 0:
+#             return jsonify({"error": "Invalid max_calories"}), 400
     
-    # Générer le plan de repas
-    meal_plan = generate_meal_plan(preferences)
+#     # Générer le plan de repas
+#     meal_plan = generate_meal_plan(preferences)
     
-    if "error" in meal_plan:
-        return jsonify(meal_plan), 400
+#     if "error" in meal_plan:
+#         return jsonify(meal_plan), 400
     
-    return jsonify(meal_plan)
+#     return jsonify(meal_plan)
 
 @app.route('/optimized_meal_plan', methods=['POST'])
 def get_optimized_meal_plan():
@@ -682,11 +785,11 @@ def get_optimized_preferences_meal_plan():
     if not isinstance(preferences["allergy"], dict):
         return jsonify({"error": "Allergy must be a dictionary"}), 400
     
-    if preferences["diet"].lower() not in ["végan", "végétarien", "none"]:
-        return jsonify({"error": "Unsupported diet"}), 400
+    # if preferences["diet"].lower() not in ["végan", "végétarien", "none"]:
+    #     return jsonify({"error": "Unsupported diet"}), 400
     
-    if preferences["goal"].lower() not in ["lose weight", "maintain", "gain weight"]:
-        return jsonify({"error": "Unsupported goal"}), 400
+    # if preferences["goal"].lower() not in ["lose weight", "maintain", "gain weight"]:
+    #     return jsonify({"error": "Unsupported goal"}), 400
     
     if not isinstance(preferences["number_of_meals"], int) or preferences["number_of_meals"] < 1:
         return jsonify({"error": "Invalid number_of_meals"}), 400

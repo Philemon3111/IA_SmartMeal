@@ -80,11 +80,12 @@ for recipe in data:
     #             type_plat = "plat principal"
     #         else:
     #             type_plat = "dessert"
-    type_plat = recipe.get("type")
+    type_plat = recipe.get("type").lower()
     calories = recipe.get("calories")
     servings = 1 #int(random.randint(1, 4))
     time = int(random.randint(15, 60))
-    
+    nutriments = recipe.get("nutriments")
+
     recipes_data.append({
         "type_plat": type_plat,
         "title": recipe.get("title", ""),
@@ -93,7 +94,11 @@ for recipe in data:
         "NER": ner,
         "calories": calories,
         "servings": servings,
-        "time": time
+        "time": time,
+        "lipide": nutriments.get("lipide"),
+        "glucide": nutriments.get("glucide"),
+        "proteine": nutriments.get("proteine"),
+        "fibre": nutriments.get('fibre')
     })
 
 # Convertir en DataFrame
@@ -113,9 +118,8 @@ print(df["type_plat"].value_counts())
 # Encoder les types de plats
 encoder = LabelEncoder()
 df["type_plat_encoded"] = encoder.fit_transform(df["type_plat"])
-
 # Préparer les entrées avec plus de caractéristiques
-X = df[["type_plat_encoded", "calories", "time"]].values
+X = df[["type_plat_encoded", "calories", "lipide", "glucide", "proteine", "fibre"]].values
 y = np.arange(len(df))
 
 # Normaliser les caractéristiques
@@ -138,77 +142,16 @@ model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
 # Entraîner le modèle
 model.fit(X, y, epochs=100, batch_size=32, validation_split=0.2, verbose=1)
 
+save_dir = "versiontest"
+os.makedirs(save_dir, exist_ok=True)
 # Sauvegarder le modèle
-model.save("meal_plan_model_newrecipe.keras")
-print("Modèle sauvegardé sous 'meal_plan_model_newrecipe.keras'")
+model.save(os.path.join(save_dir,"meal_plan.keras"))
+print("Modèle sauvegardé sous {save_dir}'/meal_plan.keras'")
 
 # Sauvegarder le DataFrame, l'encoder et le scaler
-df.to_pickle("recipes_newrecipe.pkl")
-with open("label_newrecipe.pkl", "wb") as f:
+df.to_pickle(os.path.join(save_dir,"recipes.pkl"))
+with open(os.path.join(save_dir,"label.pkl"), "wb") as f:
     pickle.dump(encoder, f)
-with open("scaler_newrecipe.pkl", "wb") as f:
+with open(os.path.join(save_dir,"scaler.pkl"), "wb") as f:
     pickle.dump(scaler, f)
 print("DataFrame, encoder et scaler sauvegardés")
-
-# Fonction pour générer un plan de repas
-def generate_meal_plan():
-    days = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"]
-    meal_plan = {}
-    weekly_selected_indices = set()
-    
-    for day in days:
-        num_meals = random.randint(1, 2)
-        meals = []
-        daily_selected_indices = set()
-        for _ in range(num_meals):
-            type_plat = random.choice(["Entree", "Dessert", "Plat"])
-            try:
-                type_plat_encoded = encoder.transform([type_plat])[0]
-                X_input = scaler.transform([[type_plat_encoded, random.randint(200, 800), random.randint(15, 60)]])
-                prediction = model.predict(X_input, verbose=0)[0]
-                for _ in range(10):
-                    recette_index = np.random.choice(len(prediction), p=prediction)
-                    if recette_index not in weekly_selected_indices:
-                        break
-                else:
-                    recette_index = np.random.choice(len(prediction), p=prediction)
-                
-                if recette_index not in daily_selected_indices:
-                    daily_selected_indices.add(recette_index)
-                    weekly_selected_indices.add(recette_index)
-                    recette = df.iloc[recette_index]
-                    meals.append({
-                        "items": [recette["title"] or "Plat sans titre"],
-                        "calories": int(recette["calories"]),
-                        "servings": int(recette["servings"]),
-                        "time": int(recette["time"]),
-                        "ingredients": recette["ingredients"]
-                    })
-            except ValueError:
-                continue
-        meal_plan[day] = meals
-    
-    return meal_plan
-
-# Fonction pour générer une liste de courses basée sur NER, sans quantités
-def generate_shopping_list(meal_plan):
-    ingredients_set = set()  # Utiliser un ensemble pour éviter les doublons
-    
-    for day, meals in meal_plan.items():
-        for meal in meals:
-            title = meal["items"][0]
-            recette = df[df["title"] == title]
-            if not recette.empty:
-                ner_items = recette.iloc[0]["NER"]  # Utiliser NER pour les ingrédients
-                for ner_item in ner_items:
-                    if ner_item and isinstance(ner_item, str) and ner_item.strip():  # Ignorer None, non-chaînes, ou chaînes vides
-                        ingredients_set.add(ner_item.strip())
-    
-    return list(ingredients_set)  # Convertir en liste pour la sortie
-
-# Tester les fonctions
-meal_plan = generate_meal_plan()
-print(json.dumps(meal_plan, ensure_ascii=False, indent=2))
-
-shopping_list = generate_shopping_list(meal_plan)
-print(json.dumps(shopping_list, ensure_ascii=False, indent=2))
