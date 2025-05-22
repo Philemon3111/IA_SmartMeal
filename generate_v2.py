@@ -1,6 +1,3 @@
-import os
-os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
-
 import json
 import pandas as pd
 import numpy as np
@@ -10,46 +7,11 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 import random
 import pickle
 
-# Charger le fichier JSON
-with open('recipeswithvegan.json', 'r', encoding='utf-8') as file:
+# Load the JSON file
+with open('newrecipe.json', 'r', encoding='utf-8') as file:
     data = json.load(file)
 
-# Listes de mots-clés pour classification
-entree_keywords = [
-    "soupe", "salade", "velouté", "crème", "maïs", "dip", "bruschetta", "tartine", 
-    "terrine", "pâté", "carpaccio", "ceviche", "gazpacho", "entrée", "amuse-bouche", 
-    "canapé", "tapas", "antipasto", "crudités", "rillettes", "quiche", "tarte salée"
-]
-plat_principal_keywords = [
-    "poulet", "bœuf", "porc", "agneau", "veau", "poisson", "crevette", "saumon", 
-    "thon", "pâte", "riz", "gratin", "rôti", "steak", "filet", "côte", "cuisse", 
-    "lasagne", "pizza", "burger", "tajine", "curry", "wok", "plat", "ragoût", 
-    "blanquette", "chili", "paella", "risotto"
-]
-dessert_keywords = [
-    "gâteau", "tarte", "biscuit", "cookie", "brownie", "muffin", "crème", "pudding", 
-    "flan", "clafoutis", "sorbet", "glace", "chocolat", "mousse", "macaron", "éclair", 
-    "millefeuille", "pavlova", "trifle", "bonbon", "candy", "dessert", "sucré", 
-    "crêpe", "gaufre", "beignet"
-]
-
-entree_ingredients = [
-    "laitue", "tomate", "concombre", "radis", "carotte râpée", "avocat", 
-    "fromage de chèvre", "anchois", "olives", "pain grillé", "croûtons", 
-    "vinaigre", "moutarde", "herbes fraîches", "poivron", "artichaut", "asperge"
-]
-plat_principal_ingredients = [
-    "poulet", "bœuf", "porc", "poisson", "crevette", "pomme de terre", "riz", 
-    "pâtes", "lentilles", "haricots", "oignon", "ail", "carotte", "courgette", 
-    "champignons", "sauce tomate", "crème fraîche", "fromage râpé", "curry", "paprika"
-]
-dessert_ingredients = [
-    "sucre", "chocolat", "beurre", "farine", "œuf", "vanille", "crème", "lait", 
-    "cacao", "fraise", "pomme", "banane", "noix", "amandes", "pépites de chocolat", 
-    "sucre en poudre", "miel", "cannelle"
-]
-
-# Créer une liste de recettes avec des types de plats
+# Create a list of recipes with relevant fields
 recipes_data = []
 for recipe in data:
     title = recipe.get("title", "").lower()
@@ -57,72 +19,57 @@ for recipe in data:
         title = ""
     
     ingredients = recipe.get("ingredients", [])
-    ingredients_lower = [ing.lower() for ing in ingredients]
     ner = recipe.get("NER", [])
+    calories = recipe.get("calories", 0)  # Use provided calories
+    type_plat = recipe.get("type", "Dessert").lower()  # Use provided type, default to Dessert
+    nutriments = recipe.get("nutriments", {})
     
-    type_plat = "dessert"
-    if any(keyword in title for keyword in entree_keywords):
-        type_plat = "entrée"
-    elif any(keyword in title for keyword in plat_principal_keywords):
-        type_plat = "plat principal"
-    elif any(keyword in title for keyword in dessert_keywords):
-        type_plat = "dessert"
-    else:
-        entree_score = sum(1 for ing in ingredients_lower for ent_ing in entree_ingredients if ent_ing in ing)
-        plat_score = sum(1 for ing in ingredients_lower for plat_ing in plat_principal_ingredients if plat_ing in ing)
-        dessert_score = sum(1 for ing in ingredients_lower for dessert_ing in dessert_ingredients if dessert_ing in ing)
-        
-        max_score = max(entree_score, plat_score, dessert_score)
-        if max_score > 0:
-            if entree_score == max_score:
-                type_plat = "entrée"
-            elif plat_score == max_score:
-                type_plat = "plat principal"
-            else:
-                type_plat = "dessert"
-    
-    calories = int(random.randint(200, 800))
-    servings = int(random.randint(1, 4))
-    time = int(random.randint(15, 60))
+    # Extract nutrient values, default to 0 if missing
+    lipide = nutriments.get("lipide", 0.0)
+    glucide = nutriments.get("glucide", 0.0)
+    proteine = nutriments.get("proteine", 0.0)
+    fibre = nutriments.get("fibre", 0.0)
     
     recipes_data.append({
         "type_plat": type_plat,
-        "title": recipe.get("title", ""),
-        "instructions": " ".join(recipe.get("directions", ["Instructions manquantes"])),
+        "title": title,
+        "instructions": " ".join(recipe.get("directions", ["Instructions missing"])),
         "ingredients": ingredients,
         "NER": ner,
         "calories": calories,
-        "servings": servings,
-        "time": time
+        "lipide": lipide,
+        "glucide": glucide,
+        "proteine": proteine,
+        "fibre": fibre
     })
 
-# Convertir en DataFrame
+# Convert to DataFrame
 df = pd.DataFrame(recipes_data)
 
-# Convertir les listes NER en chaînes pour gérer les doublons, en excluant None
+# Convert NER lists to strings for deduplication, excluding None
 df["NER_str"] = df["NER"].apply(lambda x: ",".join(sorted([item for item in x if item is not None])) if isinstance(x, list) else x)
-# Supprimer les doublons en utilisant title et NER_str
+# Remove duplicates based on title and NER_str
 df = df.drop_duplicates(subset=["title", "NER_str"])
-# Supprimer la colonne temporaire
+# Drop temporary column
 df = df.drop(columns=["NER_str"])
 
-# Vérifier la répartition des types de plats
-print("Répartition des types de plats :")
+# Check the distribution of meal types
+print("Distribution of meal types:")
 print(df["type_plat"].value_counts())
 
-# Encoder les types de plats
+# Encode meal types
 encoder = LabelEncoder()
 df["type_plat_encoded"] = encoder.fit_transform(df["type_plat"])
 
-# Préparer les entrées avec plus de caractéristiques
-X = df[["type_plat_encoded", "calories", "time"]].values
+# Prepare input features with calories and nutrients
+X = df[["type_plat_encoded", "calories", "lipide", "glucide", "proteine", "fibre"]].values
 y = np.arange(len(df))
 
-# Normaliser les caractéristiques
+# Normalize features
 scaler = StandardScaler()
 X = scaler.fit_transform(X)
 
-# Construire le modèle
+# Build the model
 model = models.Sequential([
     layers.Input(shape=(X.shape[1],)),
     layers.Dense(128, activation="relu"),
@@ -135,24 +82,24 @@ model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
               loss="sparse_categorical_crossentropy", 
               metrics=["accuracy"])
 
-# Entraîner le modèle
+# Train the model
 model.fit(X, y, epochs=100, batch_size=32, validation_split=0.2, verbose=1)
 
-# Sauvegarder le modèle
-model.save("meal_plan_model_fix.keras")
-print("Modèle sauvegardé sous 'meal_plan_model_fix.keras'")
+# Save the model
+model.save("meal_plan_model_new.keras")
+print("Model saved as 'meal_plan_model_new.keras'")
 
-# Sauvegarder le DataFrame, l'encoder et le scaler
-df.to_pickle("recipes_fix.pkl")
-with open("label_fix.pkl", "wb") as f:
+# Save the DataFrame, encoder, and scaler
+df.to_pickle("recipes_new.pkl")
+with open("label_new.pkl", "wb") as f:
     pickle.dump(encoder, f)
-with open("scaler_fix.pkl", "wb") as f:
+with open("scaler_new.pkl", "wb") as f:
     pickle.dump(scaler, f)
-print("DataFrame, encoder et scaler sauvegardés")
+print("DataFrame, encoder, and scaler saved")
 
-# Fonction pour générer un plan de repas
+# Function to generate a meal plan
 def generate_meal_plan():
-    days = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"]
+    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
     meal_plan = {}
     weekly_selected_indices = set()
     
@@ -161,12 +108,20 @@ def generate_meal_plan():
         meals = []
         daily_selected_indices = set()
         for _ in range(num_meals):
-            type_plat = random.choice(["entrée", "plat principal", "dessert"])
+            type_plat = random.choice(["entree", "plat", "dessert"])
             try:
                 type_plat_encoded = encoder.transform([type_plat])[0]
-                X_input = scaler.transform([[type_plat_encoded, random.randint(200, 800), random.randint(15, 60)]])
+                # Use average nutrient values for prediction input
+                X_input = scaler.transform([[
+                    type_plat_encoded,
+                    random.randint(200, 4000),  # Broad calorie range
+                    random.uniform(0, 200),     # Random lipide
+                    random.uniform(0, 500),     # Random glucide
+                    random.uniform(0, 300),     # Random proteine
+                    random.uniform(0, 50)       # Random fibre
+                ]])
                 prediction = model.predict(X_input, verbose=0)[0]
-                for _ in range(10):
+                for _ in range(10):  # Try to avoid duplicates
                     recette_index = np.random.choice(len(prediction), p=prediction)
                     if recette_index not in weekly_selected_indices:
                         break
@@ -178,10 +133,14 @@ def generate_meal_plan():
                     weekly_selected_indices.add(recette_index)
                     recette = df.iloc[recette_index]
                     meals.append({
-                        "items": [recette["title"] or "Plat sans titre"],
+                        "items": [recette["title"] or "Untitled dish"],
                         "calories": int(recette["calories"]),
-                        "servings": int(recette["servings"]),
-                        "time": int(recette["time"]),
+                        "nutriments": {
+                            "lipide": float(recette["lipide"]),
+                            "glucide": float(recette["glucide"]),
+                            "proteine": float(recette["proteine"]),
+                            "fibre": float(recette["fibre"])
+                        },
                         "ingredients": recette["ingredients"]
                     })
             except ValueError:
@@ -190,23 +149,23 @@ def generate_meal_plan():
     
     return meal_plan
 
-# Fonction pour générer une liste de courses basée sur NER, sans quantités
+# Function to generate a shopping list based on NER
 def generate_shopping_list(meal_plan):
-    ingredients_set = set()  # Utiliser un ensemble pour éviter les doublons
+    ingredients_set = set()  # Use a set to avoid duplicates
     
     for day, meals in meal_plan.items():
         for meal in meals:
             title = meal["items"][0]
             recette = df[df["title"] == title]
             if not recette.empty:
-                ner_items = recette.iloc[0]["NER"]  # Utiliser NER pour les ingrédients
+                ner_items = recette.iloc[0]["NER"]  # Use NER for ingredients
                 for ner_item in ner_items:
-                    if ner_item and isinstance(ner_item, str) and ner_item.strip():  # Ignorer None, non-chaînes, ou chaînes vides
+                    if ner_item and isinstance(ner_item, str) and ner_item.strip():  # Ignore None, non-strings, or empty strings
                         ingredients_set.add(ner_item.strip())
     
-    return list(ingredients_set)  # Convertir en liste pour la sortie
+    return list(ingredients_set)  # Convert to list for output
 
-# Tester les fonctions
+# Test the functions
 meal_plan = generate_meal_plan()
 print(json.dumps(meal_plan, ensure_ascii=False, indent=2))
 
