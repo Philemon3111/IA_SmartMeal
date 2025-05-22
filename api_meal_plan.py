@@ -807,25 +807,6 @@ def get_optimized_preferences_meal_plan():
     return jsonify(meal_plan)
 
 
-
-CATEGORY_RULES = {
-    "huiles": {"unit": "l", "default": 0.5, "conversions": {"ml": 0.001}},
-    "fruits": {"unit": "g", "default": 100, "conversions": {}},
-    "legumes": {"unit": "g", "default": 100, "conversions": {}},
-    "viande": {"unit": "g", "default": 400, "conversions": {}},
-    "poisson": {"unit": "g", "default": 400, "conversions": {}},
-    "lait": {"unit": "l", "default": 0.5, "conversions": {"ml": 0.001}},
-    "oeuf": {"unit": "number", "default": 1, "conversions": {}},
-    "herbes": {"unit": "g", "default_per_cuillere": 0.5, "conversions": {}},
-    "epices": {"unit": "g", "default_per_cuillere": 0.5, "conversions": {}},
-    "cereales": {"unit": "g", "default": 100, "conversions": {}},
-    "noix": {"unit": "g", "default": 100, "conversions": {}},
-    "patisserie": {"unit": "g", "default": 100, "conversions": {}},
-    "sauce": {"unit": "ml", "default_per_cuillere": 0.25, "conversions": {}},
-    "boisson": {"unit": "l", "default": 0.5, "conversions": {"ml": 0.001}},
-    "autres": {"unit": "number", "default": 1, "conversions": {}}
-}
-
 categories = {
     "huiles": ["Huile", "Huile Crisco", "Huile Mazola", "Huile Wesson", "Huile d'arachide", "Huile d'olive", "Huile de cannelle", "Huile de carthame", "Huile de clou de girofle", "Huile de cuisson", "Huile de maïs", "Huile de maïs soufflé", "Huile de menthe poivrée", "Huile de salade", "Huile de sésame", "Huile végétale", "Crisco", "Crisco fondu", "Shortening", "Shortening au goût de beurre", "Shortening végétal", "Graisse", "Graisse de bacon", "Graisse de viande fondue", "Saindoux", "Matière grasse", "Matière grasse aromatisée au beurre", "Matière grasse solide", "Matière grasse végétale"],
     "fruits": ["Abricots", "Ananas", "Ananas en dés", "Banane", "Bananes", "Cantaloup", "Cerise au marasquin", "Cerises", "Cerises au marasquin", "Cerises confites", "Cerises marasquin", "Cerises noires dénoyautées", "Citron", "Citron vert", "Citrons", "Citrouille", "Compote de pommes", "Concentré d'ananas", "Concentré de jus d'orange", "Concentré de jus de pomme", "Coquilles", "Dattes", "Fraises", "Fraises fraîches", "Fraises nettoyées", "Fraises surgelées", "Framboise rouge", "Framboises", "Framboises congelées", "Fruit", "Fruits", "Fruits confits", "Fruits confits mélangés", "Gelée de cerise", "Gelée de fraise", "Gelée de fraise Jell-O", "Gelée de groseille", "Gelée de pomme", "Gelée de raisin", "Grenadine", "Jus d'ananas", "Jus d'orange", "Jus de canneberge", "Jus de cerise", "Jus de citron", "Jus de citron vert", "Jus de framboise", "Jus de mandarine", "Jus de pomme", "Jus de pruneau", "Jus de pêche", "Jus de raisin blanc", "Kakis", "Mandarines", "Mangue", "Moitiés de poires", "Morceaux d'ananas", "Mûres fraîches", "Nectar d'abricot", "Orange", "Oranges", "Oranges mandarines", "Pamplemousse", "Pêche", "Pêches", "Pêches tranchées", "Pomme", "Pomme Granny Smith", "Pomme Red Delicious", "Pommes", "Pommes fraîches", "Pommes jaunes", "Pommes non pelées", "Pommes pelées", "Pommes rouges", "Pommes vertes", "Pommes à cuire", "Pruneaux", "Pulpe de banane", "Pulpe de kaki", "Quartiers de citron", "Raisins", "Raisins blancs", "Raisins secs", "Raisins verts", "Raisins violets", "Rhubarbe", "Segments d'orange mandarine", "Segments de mandarine", "Tranches d'ananas"],
@@ -852,50 +833,12 @@ def parse_quantity(ingredient_str):
             return float(part)
     return 1
 
-def parse_unit(ingredient_str):
-    """Parse unit from ingredient string"""
-    units = ["g", "kg", "ml", "l", "cuillère", "cuillères", "tasse", "tasses"]
-    parts = ingredient_str.split()
-    for part in parts:
-        if part in units:
-            if part in ["cuillère", "cuillères"]:
-                return "cuillere"
-            return part
-    return ""
-
 def get_category(item):
     """Find which category an item belongs to"""
     for category, items in categories.items():
         if item in items:
             return category
     return "autres"
-
-def convert_quantity(qty, from_unit, to_unit, category):
-    """Convert between units"""
-    if from_unit == to_unit:
-        return qty
-    
-    if from_unit in CATEGORY_RULES[category]["conversions"]:
-        return qty * CATEGORY_RULES[category]["conversions"][from_unit]
-    
-    return qty
-def get_standard_quantity(ingredient_str, category):
-    """Get quantity in standard units for the category"""
-    qty = parse_quantity(ingredient_str)
-    unit = parse_unit(ingredient_str)
-    
-    # Handle spoon measurements first
-    if category in ["herbes", "epices", "sauce"] and unit == "cuillere":
-        return qty * CATEGORY_RULES[category].get("default_per_cuillere", 0.5)
-    
-    # Handle case where no unit is specified
-    if qty == 1 and unit == "":
-        return CATEGORY_RULES[category].get("default", 
-               CATEGORY_RULES[category].get("default_per_cuillere", 1))
-    
-    # Handle unit conversions
-    target_unit = CATEGORY_RULES[category]["unit"]
-    return convert_quantity(qty, unit, target_unit, category)
 
 def clean_and_categorize_ingredients(meal_plan):
     """Categorize all ingredients in the meal plan"""
@@ -919,11 +862,11 @@ def extract_quantities(meal_plan, categorized):
         for meal in day_data:
             for ingredient, ingredient_str in zip(meal["NER"], meal["ingredients"]):
                 category = get_category(ingredient)
-                std_qty = get_standard_quantity(ingredient_str, category)
+                std_qty = parse_quantity(ingredient_str)
                 quantities[category].append({
                     "name": ingredient,
                     "quantity": std_qty,
-                    "unit": CATEGORY_RULES[category]["unit"]
+                    "unit": "g"
                 })
     
     return dict(quantities)
@@ -938,7 +881,15 @@ def flatten_quantities(extracted):
             item_counts[item["name"]] += item["quantity"]
         
         for name, qty in item_counts.items():
-            flattened[category].append(f"{name}: {qty} {CATEGORY_RULES[category]['unit']}")
+            no_unit = ["huiles", "herbes", "epices", "sauce"]
+            if category in no_unit:
+                flattened[category].append(f"{name}")
+            else:
+                if qty > 1000 :
+                    flattened[category].append(f"{name}: {qty/1000} kg")
+                else:
+                    flattened[category].append(f"{name}: {qty} g")
+
     
     return dict(flattened)
 
@@ -953,15 +904,21 @@ def subtract_inventory(flattened, inventory):
     
     for category, items in flattened.items():
         for item_str in items:
-            name, rest = item_str.split(":", 1)
-            current_qty = float(rest.split()[0])
-            unit = rest.split()[1]
-            
-            inv_qty = inventory_items.get(name.strip().lower(), 0)
-            remaining_qty = max(0, current_qty - inv_qty)
-            
-            if remaining_qty > 0:
-                final_list[category].append(f"{name}: {remaining_qty} {unit}")
+            no_unit = ["huiles", "herbes", "epices", "sauce"]            
+            if category not in no_unit:
+                print(item_str)
+                print(category)
+                name, rest = item_str.split(":", 1)
+                current_qty = float(rest.split()[0])
+                unit = rest.split()[1]
+                
+                inv_qty = inventory_items.get(name.strip().lower(), 0)
+                remaining_qty = max(0, current_qty - inv_qty)
+                
+                if remaining_qty > 0:
+                    final_list[category].append(f"{name}: {remaining_qty} {unit}")
+            else:
+                final_list[category].append(f"{item_str}")
     
     return dict(final_list)
 
@@ -977,32 +934,30 @@ def get_shopping_list():
     if not meal_plan:
         return jsonify({"error": "Missing meal_plan in request"}), 400
 
-    # Get categorized ingredients (we still need this for extract_quantities)
     categorized, _ = clean_and_categorize_ingredients(meal_plan)
     
-    # Process quantities
-    extracted = extract_quantities(meal_plan, categorized)  # Now passing both required arguments
+    extracted = extract_quantities(meal_plan, categorized)  
     flattened = flatten_quantities(extracted)
     
     # Subtract inventory if provided
     final_list = subtract_inventory(flattened, inventory) if inventory else flattened
     
     # Clean the output by removing "number" units
-    cleaned_list = {}
-    for category, items in final_list.items():
-        cleaned_items = []
-        for item in items:
-            if ": " in item:
-                name, quantity = item.split(": ", 1)
-                if quantity.endswith(" number"):
-                    cleaned_items.append(f"{name}: {quantity[:-7]}")  # Remove " number"
-                else:
-                    cleaned_items.append(item)
-            else:
-                cleaned_items.append(item)
-        cleaned_list[category] = cleaned_items
+    # cleaned_list = {}
+    # for category, items in final_list.items():
+    #     cleaned_items = []
+    #     for item in items:
+    #         if ": " in item:
+    #             name, quantity = item.split(": ", 1)
+    #             if quantity.endswith(" number"):
+    #                 cleaned_items.append(f"{name}: {quantity[:-7]}")  # Remove " number"
+    #             else:
+    #                 cleaned_items.append(item)
+    #         else:
+    #             cleaned_items.append(item)
+    #     cleaned_list[category] = cleaned_items
     
-    return jsonify(cleaned_list)
+    return jsonify(final_list)
 
 
 if __name__ == "__main__":
