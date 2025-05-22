@@ -11,43 +11,43 @@ import random
 import pickle
 
 # Charger le fichier JSON
-with open('recipes_fix.json', 'r', encoding='utf-8') as file:
+with open('newrecipe.json', 'r', encoding='utf-8') as file:
     data = json.load(file)
 
 # Listes de mots-clés pour classification
-entree_keywords = [
-    "soupe", "salade", "velouté", "crème", "maïs", "dip", "bruschetta", "tartine", 
-    "terrine", "pâté", "carpaccio", "ceviche", "gazpacho", "entrée", "amuse-bouche", 
-    "canapé", "tapas", "antipasto", "crudités", "rillettes", "quiche", "tarte salée"
-]
-plat_principal_keywords = [
-    "poulet", "bœuf", "porc", "agneau", "veau", "poisson", "crevette", "saumon", 
-    "thon", "pâte", "riz", "gratin", "rôti", "steak", "filet", "côte", "cuisse", 
-    "lasagne", "pizza", "burger", "tajine", "curry", "wok", "plat", "ragoût", 
-    "blanquette", "chili", "paella", "risotto"
-]
-dessert_keywords = [
-    "gâteau", "tarte", "biscuit", "cookie", "brownie", "muffin", "crème", "pudding", 
-    "flan", "clafoutis", "sorbet", "glace", "chocolat", "mousse", "macaron", "éclair", 
-    "millefeuille", "pavlova", "trifle", "bonbon", "candy", "dessert", "sucré", 
-    "crêpe", "gaufre", "beignet"
-]
+# entree_keywords = [
+#     "soupe", "salade", "velouté", "crème", "maïs", "dip", "bruschetta", "tartine", 
+#     "terrine", "pâté", "carpaccio", "ceviche", "gazpacho", "entrée", "amuse-bouche", 
+#     "canapé", "tapas", "antipasto", "crudités", "rillettes", "quiche", "tarte salée"
+# ]
+# plat_principal_keywords = [
+#     "poulet", "bœuf", "porc", "agneau", "veau", "poisson", "crevette", "saumon", 
+#     "thon", "pâte", "riz", "gratin", "rôti", "steak", "filet", "côte", "cuisse", 
+#     "lasagne", "pizza", "burger", "tajine", "curry", "wok", "plat", "ragoût", 
+#     "blanquette", "chili", "paella", "risotto"
+# ]
+# dessert_keywords = [
+#     "gâteau", "tarte", "biscuit", "cookie", "brownie", "muffin", "crème", "pudding", 
+#     "flan", "clafoutis", "sorbet", "glace", "chocolat", "mousse", "macaron", "éclair", 
+#     "millefeuille", "pavlova", "trifle", "bonbon", "candy", "dessert", "sucré", 
+#     "crêpe", "gaufre", "beignet"
+# ]
 
-entree_ingredients = [
-    "laitue", "tomate", "concombre", "radis", "carotte râpée", "avocat", 
-    "fromage de chèvre", "anchois", "olives", "pain grillé", "croûtons", 
-    "vinaigre", "moutarde", "herbes fraîches", "poivron", "artichaut", "asperge"
-]
-plat_principal_ingredients = [
-    "poulet", "bœuf", "porc", "poisson", "crevette", "pomme de terre", "riz", 
-    "pâtes", "lentilles", "haricots", "oignon", "ail", "carotte", "courgette", 
-    "champignons", "sauce tomate", "crème fraîche", "fromage râpé", "curry", "paprika"
-]
-dessert_ingredients = [
-    "sucre", "chocolat", "beurre", "farine", "œuf", "vanille", "crème", "lait", 
-    "cacao", "fraise", "pomme", "banane", "noix", "amandes", "pépites de chocolat", 
-    "sucre en poudre", "miel", "cannelle"
-]
+# entree_ingredients = [
+#     "laitue", "tomate", "concombre", "radis", "carotte râpée", "avocat", 
+#     "fromage de chèvre", "anchois", "olives", "pain grillé", "croûtons", 
+#     "vinaigre", "moutarde", "herbes fraîches", "poivron", "artichaut", "asperge"
+# ]
+# plat_principal_ingredients = [
+#     "poulet", "bœuf", "porc", "poisson", "crevette", "pomme de terre", "riz", 
+#     "pâtes", "lentilles", "haricots", "oignon", "ail", "carotte", "courgette", 
+#     "champignons", "sauce tomate", "crème fraîche", "fromage râpé", "curry", "paprika"
+# ]
+# dessert_ingredients = [
+#     "sucre", "chocolat", "beurre", "farine", "œuf", "vanille", "crème", "lait", 
+#     "cacao", "fraise", "pomme", "banane", "noix", "amandes", "pépites de chocolat", 
+#     "sucre en poudre", "miel", "cannelle"
+# ]
 
 # Créer une liste de recettes avec des types de plats
 recipes_data = []
@@ -60,29 +60,29 @@ for recipe in data:
     ingredients_lower = [ing.lower() for ing in ingredients]
     ner = recipe.get("NER", [])
     
-    type_plat = "dessert"
-    if any(keyword in title for keyword in entree_keywords):
-        type_plat = "entrée"
-    elif any(keyword in title for keyword in plat_principal_keywords):
-        type_plat = "plat principal"
-    elif any(keyword in title for keyword in dessert_keywords):
-        type_plat = "dessert"
-    else:
-        entree_score = sum(1 for ing in ingredients_lower for ent_ing in entree_ingredients if ent_ing in ing)
-        plat_score = sum(1 for ing in ingredients_lower for plat_ing in plat_principal_ingredients if plat_ing in ing)
-        dessert_score = sum(1 for ing in ingredients_lower for dessert_ing in dessert_ingredients if dessert_ing in ing)
+    # type_plat = "dessert"
+    # if any(keyword in title for keyword in entree_keywords):
+    #     type_plat = "entrée"
+    # elif any(keyword in title for keyword in plat_principal_keywords):
+    #     type_plat = "plat principal"
+    # elif any(keyword in title for keyword in dessert_keywords):
+    #     type_plat = "dessert"
+    # else:
+    #     entree_score = sum(1 for ing in ingredients_lower for ent_ing in entree_ingredients if ent_ing in ing)
+    #     plat_score = sum(1 for ing in ingredients_lower for plat_ing in plat_principal_ingredients if plat_ing in ing)
+    #     dessert_score = sum(1 for ing in ingredients_lower for dessert_ing in dessert_ingredients if dessert_ing in ing)
         
-        max_score = max(entree_score, plat_score, dessert_score)
-        if max_score > 0:
-            if entree_score == max_score:
-                type_plat = "entrée"
-            elif plat_score == max_score:
-                type_plat = "plat principal"
-            else:
-                type_plat = "dessert"
-    
-    calories = int(random.randint(200, 800))
-    servings = int(random.randint(1, 4))
+    #     max_score = max(entree_score, plat_score, dessert_score)
+    #     if max_score > 0:
+    #         if entree_score == max_score:
+    #             type_plat = "entrée"
+    #         elif plat_score == max_score:
+    #             type_plat = "plat principal"
+    #         else:
+    #             type_plat = "dessert"
+    type_plat = recipe.get("type")
+    calories = recipe.get("calories")
+    servings = 1 #int(random.randint(1, 4))
     time = int(random.randint(15, 60))
     
     recipes_data.append({
@@ -139,14 +139,14 @@ model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
 model.fit(X, y, epochs=100, batch_size=32, validation_split=0.2, verbose=1)
 
 # Sauvegarder le modèle
-model.save("meal_plan_model_fix.keras")
-print("Modèle sauvegardé sous 'meal_plan_model_fix.keras'")
+model.save("meal_plan_model_newrecipe.keras")
+print("Modèle sauvegardé sous 'meal_plan_model_newrecipe.keras'")
 
 # Sauvegarder le DataFrame, l'encoder et le scaler
-df.to_pickle("recipes_fix.pkl")
-with open("label_fix.pkl", "wb") as f:
+df.to_pickle("recipes_newrecipe.pkl")
+with open("label_newrecipe.pkl", "wb") as f:
     pickle.dump(encoder, f)
-with open("scaler_fix.pkl", "wb") as f:
+with open("scaler_newrecipe.pkl", "wb") as f:
     pickle.dump(scaler, f)
 print("DataFrame, encoder et scaler sauvegardés")
 
@@ -161,7 +161,7 @@ def generate_meal_plan():
         meals = []
         daily_selected_indices = set()
         for _ in range(num_meals):
-            type_plat = random.choice(["entrée", "plat principal", "dessert"])
+            type_plat = random.choice(["Entree", "Dessert", "Plat"])
             try:
                 type_plat_encoded = encoder.transform([type_plat])[0]
                 X_input = scaler.transform([[type_plat_encoded, random.randint(200, 800), random.randint(15, 60)]])
