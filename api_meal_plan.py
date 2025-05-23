@@ -18,7 +18,7 @@ from fuzzywuzzy import fuzz
 app = Flask(__name__)
 
 # Charger les données sauvegardées
-dir = "version6/"
+dir = "version7/"
 try:
     df = pd.read_pickle(dir + "recipes.pkl")
     with open(dir + "label.pkl", "rb") as f:
@@ -73,7 +73,7 @@ ALLERGEN_KEYWORDS = {
 }
 
 chemin_vegan = "alimentliste/non_vegan.json"
-chemin_vegan = "alimentliste/non_vegan.json"
+# chemin_vegan = "alimentliste/non_vegan.json"
 chemin_paleo = "alimentliste/non_keto.json"
 chemin_sporc = "alimentliste/sans_porc.json"
 chemin_keto = "alimentliste/non_paleo.json"
@@ -113,19 +113,19 @@ if os.path.exists(chemin_paleo):
     with open(chemin_paleo, 'r', encoding='utf-8') as fichier:
         ner_paleo = json.load(fichier)        
 # Normaliser les ingrédients au chargement
-def normalize_ingredient(ingredient):
-    translations = {
-        "lait": "milk",
-        "œufs": "egg",
-        "moutarde": "mustard",
-        "cacahuètes": "peanut",
-        "fruits à coque": "nut"
-    }
-    for fr, en in translations.items():
-        ingredient = ingredient.replace(fr, en)
-    return ingredient.lower()
+# def normalize_ingredient(ingredient):
+#     translations = {
+#         "lait": "milk",
+#         "œufs": "egg",
+#         "moutarde": "mustard",
+#         "cacahuètes": "peanut",
+#         "fruits à coque": "nut"
+#     }
+#     for fr, en in translations.items():
+#         ingredient = ingredient.replace(fr, en)
+#     return ingredient.lower()
 
-df["ingredients"] = df["ingredients"].apply(lambda x: [normalize_ingredient(ing) for ing in x])
+# df["ingredients"] = df["ingredients"].apply(lambda x: [normalize_ingredient(ing) for ing in x])
 
 # Fonction pour vérifier si une recette respecte les contraintes
 def is_recipe_valid(recipe, allergies, diet, max_calories=None):
@@ -279,7 +279,7 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None):
         meals = []
         daily_selected_indices = set()
 
-        for _ in range(num_meals):
+        for _ in range(num_meals+1):
             type_plat = random.choice(valid_meal_types)
             try:
                 type_plat_encoded = encoder.transform([type_plat])[0]
@@ -400,7 +400,8 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None):
                     recette = df.iloc[recette_index]
                     daily_selected_indices.add(recette_index)
                     weekly_selected_indices.add(recette_index)
-                    
+                    # print("ici")
+                    # print(recette)
                     meals.append({
                         "items": [recette["title"] or "Plat sans titre"],
                         "calories": int(recette["calories"]),
@@ -413,7 +414,9 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None):
                         "ingredients": recette["ingredients"],
                         "preparation": recette["instructions"],
                         "NER": recette["NER"],
-                        "type": recette["type_plat"]
+                        "type": recette["type_plat"],
+                        "time": int(recette["time"]),
+                        "servings": int(recette["servings"])
                     })
                 except IndexError as e:
                     print(f"Erreur d'accès à la recette: {e}")
@@ -885,6 +888,7 @@ def get_optimized_preferences_meal_plan():
     if "error" in meal_plan:
         return jsonify(meal_plan), 400
     
+    # print(meal_plan)
     return jsonify(meal_plan)
 
 
