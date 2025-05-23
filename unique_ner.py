@@ -1,6 +1,6 @@
 import json
 
-with open('recipes_fix.json', 'r', encoding='utf-8') as f:
+with open('newrecipe.json', 'r', encoding='utf-8') as f:
     data = json.load(f) 
 
 all_ner = []

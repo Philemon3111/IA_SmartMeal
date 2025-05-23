@@ -72,6 +72,7 @@ ALLERGEN_KEYWORDS = {
     "celeri": ["celery", "celeri", "celeri-rave", "graine de celeri", "jus de celeri"]
 }
 
+chemin_allergie = "alimentliste/allergen.json"
 chemin_vegan = "alimentliste/non_vegan.json"
 # chemin_vegan = "alimentliste/non_vegan.json"
 chemin_paleo = "alimentliste/non_keto.json"
@@ -111,7 +112,14 @@ ner_paleo = None
 if os.path.exists(chemin_paleo):
     # Ouvrir et lire le fichier JSON
     with open(chemin_paleo, 'r', encoding='utf-8') as fichier:
-        ner_paleo = json.load(fichier)        
+        ner_paleo = json.load(fichier) 
+
+ner_allergie = None
+# Vérifier si le fichier existe
+if os.path.exists(chemin_allergie):
+    # Ouvrir et lire le fichier JSON
+    with open(chemin_allergie, 'r', encoding='utf-8') as fichier:
+        ner_allergie = json.load(fichier)           
 # Normaliser les ingrédients au chargement
 # def normalize_ingredient(ingredient):
 #     translations = {
@@ -134,10 +142,10 @@ def is_recipe_valid(recipe, allergies, diet, max_calories=None):
     # Vérifier les allergènes
     for allergen, is_allergic in allergies.items():
         if is_allergic:
-            keywords = ALLERGEN_KEYWORDS.get(allergen, [allergen.lower()])
-            if any(any(keyword in ing for keyword in keywords) for ing in ingredients):
-                print(f"Recette '{recipe['title']}' rejetée pour allergène : {allergen}")
-                return False
+                keywords = ner_allergie.get(allergen, []) if isinstance(ner_allergie, dict) else []
+                if any(any(keyword in ing for keyword in keywords) for ing in ingredients):
+                    print(f"Recette '{recipe['title']}' rejetée pour allergène : {allergen}")
+                    return False
     
     # Vérifier le régime végétarien
     if diet.lower() == "végétarien" or diet.lower() == "vegetarian":
