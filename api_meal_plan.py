@@ -75,8 +75,8 @@ ALLERGEN_KEYWORDS = {
 chemin_vegan = "alimentliste/non_vegan.json"
 chemin_vegan = "alimentliste/non_vegan.json"
 chemin_paleo = "alimentliste/non_keto.json"
-chemin_sporc = "alimentliste/non_paleo.json"
-chemin_keto = "alimentliste/sans_porc.json"
+chemin_sporc = "alimentliste/sans_porc.json"
+chemin_keto = "alimentliste/non_paleo.json"
 ner_vegan = None
 # Vérifier si le fichier existe
 if os.path.exists(chemin_vegan):
@@ -156,21 +156,21 @@ def is_recipe_valid(recipe, allergies, diet, max_calories=None):
     # Vérifier le régime sans porc
     if diet.lower() == "sans porc":
         for ing in ingredients:
-            if any(non_sporc in ing for non_sporc in NO_PORC_EXCLUDED_INGREDIENTS):
+            if any(non_sporc in ing for non_sporc in ner_sporc):
                 print(f"Recette '{recipe['title']}' rejetée pour ingrédient sans porc : {ing}")
                 return False
     
     # Vérifier le régime keto
     if diet.lower() == "keto":
         for ing in ingredients:
-            if any(non_keto in ing for non_keto in KETO_EXCLUDED_INGREDIENT):
+            if any(non_keto in ing for non_keto in ner_keto):
                 print(f"Recette '{recipe['title']}' rejetée pour ingrédient non-keto : {ing}")
                 return False
     
     # Vérifier le régime végan
     if diet.lower() == "paleo":
         for ing in ingredients:
-            if any(non_paleo in ing for non_paleo in PALEO_EXCLUDED_INGREDIENT):
+            if any(non_paleo in ing for non_paleo in ner_paleo):
                 print(f"Recette '{recipe['title']}' rejetée pour ingrédient non-paléo : {ing}")
                 return False
 
@@ -256,7 +256,7 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None):
     if inventory_ingredients:
         ingredient_scores = np.zeros(len(valid_recipes))
         for idx, recipe in valid_recipes.iterrows():
-            recipe_ingredients = [normalize_string(ing) for ing in recipe["ingredients"]]
+            recipe_ingredients = [ing for ing in recipe["ingredients"]]
             matches = 0
             matched_ingredients = []
             for inv_ing in inventory_ingredients:
