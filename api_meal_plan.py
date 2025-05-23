@@ -868,11 +868,11 @@ categories = {
     "huiles": ["Huile", "Huile d'olive", "Crisco", "Graisse", "Graisse de bacon", "Graisse de viande fondue", "Saindoux", "Shortening", "Spray de cuisson", "Aérosol de cuisson végétal", "Pam"],
     "fruits": ["Abricots", "Ananas", "Bananes", "Canneberges", "Cantaloup", "Cerises", "Citrons", "Citron vert", "Citrouille", "Cocktail de fruits", "Dattes", "Fraises", "Framboises", "Framboisese", "Kakis", "Mandarines", "Mangue", "Myrtilles", "Orange", "Oranges", "Pêches", "Poires", "Pommes", "Pruneaux", "Pulpe de Bananes", "Pulpe de kaki", "Raisins", "Raisins blancs", "Raisins secs", "Raisins verts", "Raisins violets", "Rhubarbe", "Segments d'orange mandarine", "Segments de mandarine", "Tranches d'ananas"],
     "légumes": ["Ail", "Artichauts", "Aubergine", "Betteraves", "Brocoli", "Carottes", "Céleri", "Champignons", "Chou", "Chou rouge", "Chou vert", "Chou-fleur", "Châtaignes d'eau", "Concombre", "Courge", "Courgettes", "Câpres", "Échalotes", "Épinards", "Épinards hachés", "Épinards à la crème", "Feuilles de navet", "Haricots", "Haricots rouges", "Haricots verts", "Laitue", "Maïs", "Maïs en crème", "Maïs entier", "Maïs à la crème", "Navets", "Oignon", "Oignon violet", "Oignons", "Oignons frits", "Oignons jaunes", "Oignons rouge", "Oignons verts", "Okra", "Olives", "Patates douces", "Petits pois", "Pois", "Pois chiches", "Pois mange-tout", "Pois à vache", "Poireaux", "Poivron rouge", "Poivron rouges", "Poivron vert", "Poivron verts", "Poivrons", "Pommes de terre", "Pousses de bambou", "Radis", "Tomates", "Zucchini"],
-    "viandes": ["Agneau", "Bacon", "Bifteck", "Boeuf", "Boeuf haché", "Brisket", "Côtelettes de porc", "Dinde", "Foie de veau", "Hamburger", "Hot-dogs", "Jambon", "Os de jambon", "Os à soupe charnus", "Pepperoni", "Porc", "Rôti de Boeuf", "Rôti de palette", "Rôti de porc", "Salami", "Saucisse", "Saucisse d'été", "Saucisse de porc", "Saucisse douce", "Saucisse fumée", "Saucisse piquante", "Saucisse épicée", "Saucisses de Francfort", "Saucisses italiennes douces", "Steak", "Viande hachée", "Viande à ragoût"],
+    "viandes": ["Agneau", "Bacon", "Bifteck", "Bœuf", "Bœuf haché", "Brisket", "Côtelettes de porc", "Dinde", "Foie de veau", "Hamburger", "Hot-dogs", "Jambon", "Os de jambon", "Os à soupe charnus", "Pepperoni", "Porc", "Rôti de Bœuf", "Rôti de palette", "Rôti de porc", "Salami", "Saucisse", "Saucisse d'été", "Saucisse de porc", "Saucisse douce", "Saucisse fumée", "Saucisse piquante", "Saucisse épicée", "Saucisses de Francfort", "Saucisses italiennes douces", "Steak", "Viande hachée", "Viande à ragoût"],
     "poissons": ["Aiglefin", "Anchois", "Chair de crabe", "Chair de crabe imitée", "Crabe", "Crevettes", "Filet de Colin", "Filet de poisson", "Flet", "Fruits de mer", "Huîtres", "Liquide d'huîtres", "Mulet", "Palourdes", "Poisson blanc ferme", "Pétoncles", "Queues d'écrevisses", "Saumon", "Soupe à la crevette", "Thon", "Têtes de poisson"],
     "produits laitiers solides (g)": ["Beurre", "Fromage", "Fromage Cheddar", "Fromage Feta", "Fromage Monterey Jack", "Fromage Mozzarella", "Fromage Muenster", "Fromage Parmesan", "Fromage Provolone", "Fromage Ricotta", "Fromage Romano", "Fromage Suisse", "Fromage Velveeta", "Fromage américain", "Fromage au piment", "Fromage bleu", "Fromage cottage", "Fromage râpé", "Fromage à l'ail", "Fromage à la crème", "Fromage à pizza", "Margarine", "Crème", "Crème Carnation", "Crème aigre", "Crème de champignons", "Crème de céleri", "Crème fouettée", "Crème légère", "Crème sure", "Crème épaisse", "Yaourt", "Yaourt au Citrons", "Yaourt aux fruits", "Lait en poudre"],
     "produits laitiers liquides (ml)": ["Babeurre", "Lait", "Lait concentré", "Lait de coco", "Lait écrémé", "Lait évaporé", "Crème liquide"],
-    "oeufs": ["Oeuf", "Blanc d'oeuf", "Blancs d'Oeuf", "Jaunes d'Oeuf", "Substitut d'oeuf"],
+    "oeufs": ["Œuf", "Blanc d'œuf", "Blancs d'œuf", "Jaunes d'Œuf", "Substitut d'œuf"],
     "herbes": ["Aneth", "Basilic", "Ciboulette", "Coriandre", "Estragon", "Feuilles de laurier", "Marjolaine", "Origan", "Persil", "Romarin", "Sauge", "Thym"],
     "épices": ["Ail en poudre", "Anis", "Anisette", "Cannelle", "Cardamome", "Cayenne", "Clous de girofle", "Cumin", "Curcuma", "Curry", "Gingembre", "Graine de moutarde", "Graines de carvi", "Graines de cumin", "Graines de céleri", "Graines de pavot", "Graines de sésame", "Graines de tournesol", "Muscade", "Paprika", "Piment", "Piment de Cayenne", "Piment de la Jamaïque", "Poivre", "Poivre blanc", "Poivre citronné", "Poivre de Cayenne", "Poivre noir", "Poivre rouge moulu", "Quatre-épices", "Racine de gingembre", "Raifort", "Safran", "Sel", "Sel assaisonné", "Sel d'ail", "Sel d'oignon", "Sel de céleri", "Sel gros", "Épice du Moyen-Orient", "Épice jerk", "Épices pour tarte aux pommes", "Épices pour tarte à la citrouille", "Épices à marinades"],
     "céréales": ["Avoine", "Biscuits", "Chapelure", "Corn Chex", "Cornflakes", "Craquelins Graham", "Craquelins de seigle", "Crackers", "Farine", "Farine à lever", "Germe de blé grillé", "Miettes de biscuits", "Miettes de cornflakes", "Miettes de crackers", "Miettes de craquelins", "Miettes de pain", "Orge perlé", "Pain", "Pain blanc", "Pain de blé complet", "Pain de maïs", "Pain de mie", "Pain de seigle", "Pain français", "Pain grillé", "Pain rassis", "Pains au levain", "Pains de levure", "Petits pains", "Riz", "Riz brun", "Semoule de maïs", "Tapioca", "Tortillas", "Tortillas de maïs", "Wontons chinois", "Wrappers wonton"],
@@ -954,7 +954,7 @@ def flatten_quantities(extracted):
             no_unit = ["herbes", "epices"]
             if category in no_unit:
                 flattened[category].append(f"{name}")
-            elif category in ["huiles"]:
+            elif category in ["huiles", "sauces"]:
                 flattened[category].append(f"{name}: {qty} ml")
             else:
                 flattened[category].append(f"{name}: {qty} g")
@@ -973,10 +973,8 @@ def subtract_inventory(flattened, inventory):
     
     for category, items in flattened.items():
         for item_str in items:
-            no_unit = ["herbes", "epices"]            
+            no_unit = ["herbes", "epices"]
             if category not in no_unit:
-                # print(item_str)
-                # print(category)
                 name, rest = item_str.split(":", 1)
                 current_qty = float(rest.split()[0])
                 unit = rest.split()[1]
@@ -985,10 +983,14 @@ def subtract_inventory(flattened, inventory):
                 remaining_qty = max(0, current_qty - inv_qty)
                 
                 if remaining_qty > 0:
-                    if category == "huiles":
+                    if category in ["huiles", "produits laitiers liquides (ml)"]:
                         final_list[category].append(f"{name}: {remaining_qty // 250 + (1 if remaining_qty % 1000 != 0 else 0)} bouteille")
                     else:
-                        if remaining_qty>1000:
+                        if name == "Œuf":
+                            final_list[category].append(f"{name}: {int(remaining_qty/50)}")
+                        elif name == "Eau":
+                            continue
+                        elif remaining_qty>1000 and unit == "g":
                             final_list[category].append(f"{name}: {remaining_qty/1000} kg")
                         else:
                             final_list[category].append(f"{name}: {remaining_qty} {unit}")
