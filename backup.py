@@ -18,7 +18,7 @@ from fuzzywuzzy import fuzz
 app = Flask(__name__)
 
 # Charger les données sauvegardées
-dir = "version6/"
+dir = "versiontest/"
 try:
     df = pd.read_pickle(dir + "recipes.pkl")
     with open(dir + "label.pkl", "rb") as f:
@@ -73,7 +73,6 @@ ALLERGEN_KEYWORDS = {
 }
 
 chemin_vegan = "alimentliste/non_vegan.json"
-chemin_vegan = "alimentliste/non_vegan.json"
 chemin_paleo = "alimentliste/non_keto.json"
 chemin_sporc = "alimentliste/non_paleo.json"
 chemin_keto = "alimentliste/sans_porc.json"
@@ -112,6 +111,7 @@ if os.path.exists(chemin_paleo):
     # Ouvrir et lire le fichier JSON
     with open(chemin_paleo, 'r', encoding='utf-8') as fichier:
         ner_paleo = json.load(fichier)        
+
 # Normaliser les ingrédients au chargement
 def normalize_ingredient(ingredient):
     translations = {
@@ -156,21 +156,21 @@ def is_recipe_valid(recipe, allergies, diet, max_calories=None):
     # Vérifier le régime sans porc
     if diet.lower() == "sans porc":
         for ing in ingredients:
-            if any(non_sporc in ing for non_sporc in NO_PORC_EXCLUDED_INGREDIENTS):
+            if any(non_sporc in ing for non_sporc in ner_sporc):
                 print(f"Recette '{recipe['title']}' rejetée pour ingrédient sans porc : {ing}")
                 return False
     
     # Vérifier le régime keto
     if diet.lower() == "keto":
         for ing in ingredients:
-            if any(non_keto in ing for non_keto in KETO_EXCLUDED_INGREDIENT):
+            if any(non_keto in ing for non_keto in ner_keto):
                 print(f"Recette '{recipe['title']}' rejetée pour ingrédient non-keto : {ing}")
                 return False
     
     # Vérifier le régime végan
     if diet.lower() == "paleo":
         for ing in ingredients:
-            if any(non_paleo in ing for non_paleo in PALEO_EXCLUDED_INGREDIENT):
+            if any(non_paleo in ing for non_paleo in ner_paleo):
                 print(f"Recette '{recipe['title']}' rejetée pour ingrédient non-paléo : {ing}")
                 return False
 
@@ -272,7 +272,7 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None):
         # print(f"Scores d'ingrédients calculés : min={ingredient_scores.min()}, max={ingredient_scores.max()}, max_score brut={max_score}")
 
     valid_meal_types = list(encoder.classes_)
-    # print(f"Valid meal types for selection: {valid_meal_types}")
+    print(f"Valid meal types for selection: {valid_meal_types}")
 
     for day in days:
         num_meals = meals_per_day
@@ -295,112 +295,61 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None):
                 prediction = model.predict(X_input, verbose=0)[0]
                 print(f"Taille de prediction pour {type_plat} le {day}: {len(prediction)}")
                 
-                # First branch - if preferences or inventory_ingredients
                 if preferences or inventory_ingredients:
                     valid_indices = list(valid_recipes.index)
-                    valid_indices = [i for i in valid_indices if i < len(df) and df.iloc[i]["type_plat"] == type_plat and i < len(prediction)]                    
+                    valid_indices = [i for i in valid_indices if df.iloc[i]["type_plat"] == type_plat]
                     print(f"Taille de valid_indices pour {type_plat} le {day}: {len(valid_indices)}")
-                    
-                    # Additional validation checks
-                    valid_indices = [i for i in valid_indices if i < len(df) and i < len(prediction)]
-                    if not valid_indices:
-                        print(f"Aucune recette valide après vérification complète pour {type_plat} le {day}")
+                    if len(valid_indices) == 0:
+                        print(f"Aucune recette valide pour {type_plat} le {day}")
                         continue
-                    
-                    try:
-                        valid_probs = prediction[valid_indices]
-                    except IndexError as e:
-                        print(f"Erreur d'index avec prediction array: {e}")
+                    valid_indices = [i for i in valid_indices if i < len(df)]
+                    if len(valid_indices) == 0:
+                        print(f"Aucun indice valide après vérification pour {type_plat} le {day}")
                         continue
-                        
+                    valid_probs = prediction[valid_indices]
                     print(f"Taille de valid_probs pour {type_plat} le {day}: {len(valid_probs)}")
-                    
                     if len(valid_probs) != len(valid_indices):
                         print(f"Erreur : valid_probs ({len(valid_probs)}) et valid_indices ({len(valid_indices)}) ont des tailles différentes")
-                        try:
-                            recette_index = random.choice(valid_indices)
-                        except IndexError:
-                            print(f"Impossible de sélectionner dans valid_indices vide pour {type_plat} le {day}")
-                            continue
+                        recette_index = random.choice(valid_indices)
                     elif valid_probs.sum() == 0 or np.isnan(valid_probs).any():
                         print(f"Avertissement : Probabilités invalides pour {type_plat} le {day}, sélection aléatoire")
-                        try:
-                            recette_index = random.choice(valid_indices)
-                        except IndexError:
-                            print(f"Impossible de sélectionner dans valid_indices vide pour {type_plat} le {day}")
-                            continue
+                        recette_index = random.choice(valid_indices)
                     else:
                         valid_probs = valid_probs / valid_probs.sum()
                         if ingredient_scores is not None:
                             valid_scores = ingredient_scores[:len(valid_indices)]
                             valid_probs = valid_probs * (0.5 + 0.5 * valid_scores)
                             valid_probs = valid_probs / valid_probs.sum()
-                        
                         sequential_indices = list(range(len(valid_indices)))
                         for _ in range(10):
-                            try:
-                                seq_index = np.random.choice(sequential_indices, p=valid_probs)
-                                recette_index = valid_indices[seq_index]
-                                if recette_index not in daily_selected_indices:
-                                    break
-                            except (ValueError, IndexError) as e:
-                                print(f"Erreur lors de la sélection aléatoire: {e}")
-                                continue
+                            # print(valid_probs)
+                            seq_index = np.random.choice(sequential_indices, p=valid_probs)
+                            recette_index = valid_indices[seq_index]
+                            if recette_index not in daily_selected_indices:
+                                break
                         else:
-                            try:
-                                seq_index = np.random.choice(sequential_indices, p=valid_probs)
-                                recette_index = valid_indices[seq_index]
-                            except (ValueError, IndexError) as e:
-                                print(f"Erreur lors de la sélection aléatoire finale: {e}")
-                                continue
-
-                # Second branch - else case
+                            seq_index = np.random.choice(sequential_indices, p=valid_probs)
+                            recette_index = valid_indices[seq_index]
                 else:
                     valid_indices = list(range(len(df)))
                     valid_indices = [i for i in valid_indices if df.iloc[i]["type_plat"] == type_plat]
                     print(f"Taille de valid_indices pour {type_plat} le {day}: {len(valid_indices)}")
-                    
                     if len(prediction) == 0:
                         print(f"Aucune prédiction disponible pour {type_plat} le {day}")
                         continue
-                    
-                    # Additional validation
-                    valid_indices = [i for i in valid_indices if i < len(prediction)]
-                    if not valid_indices:
-                        print(f"Aucun indice valide après vérification pour {type_plat} le {day}")
-                        continue
-                    
-                    try:
-                        prediction = prediction / prediction.sum()
-                    except (ValueError, ZeroDivisionError) as e:
-                        print(f"Erreur de normalisation des probabilités: {e}")
-                        continue
-                    
+                    prediction = prediction / prediction.sum()
                     for _ in range(10):
-                        try:
-                            recette_index = np.random.choice(valid_indices, p=prediction[valid_indices])
-                            if recette_index not in daily_selected_indices:
-                                break
-                        except (ValueError, IndexError) as e:
-                            print(f"Erreur lors de la sélection aléatoire: {e}")
-                            continue
+                        recette_index = np.random.choice(valid_indices, p=prediction)
+                        if recette_index not in daily_selected_indices:
+                            break
                     else:
-                        try:
-                            recette_index = np.random.choice(valid_indices, p=prediction[valid_indices])
-                        except (ValueError, IndexError) as e:
-                            print(f"Erreur lors de la sélection aléatoire finale: {e}")
-                            continue
-
-                # Final validation before adding to meals
-                if recette_index >= len(df):
-                    print(f"Index de recette invalide {recette_index} (taille df: {len(df)})")
-                    continue
-
-                try:
-                    recette = df.iloc[recette_index]
+                        recette_index = np.random.choice(valid_indices, p=prediction)
+                
+                if recette_index not in daily_selected_indices and recette_index < len(df):
                     daily_selected_indices.add(recette_index)
                     weekly_selected_indices.add(recette_index)
-                    
+                    recette = df.iloc[recette_index]
+                    # print(recette)
                     meals.append({
                         "items": [recette["title"] or "Plat sans titre"],
                         "calories": int(recette["calories"]),
@@ -415,12 +364,6 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None):
                         "NER": recette["NER"],
                         "type": recette["type_plat"]
                     })
-                except IndexError as e:
-                    print(f"Erreur d'accès à la recette: {e}")
-                    continue
-                except KeyError as e:
-                    print(f"Colonne manquante dans les données: {e}")
-                    continue
                     # print(f"Recette sélectionnée : {recette['title']} (index {recette_index}) pour {type_plat} le {day}")
                 else:
                     print(f"Index {recette_index} déjà utilisé ou invalide pour {type_plat} le {day}")
@@ -888,37 +831,43 @@ def get_optimized_preferences_meal_plan():
     return jsonify(meal_plan)
 
 
-categories = {
-    "huiles": ["Huile", "Huile d'olive", "Crisco", "Graisse", "Graisse de bacon", "Graisse de viande fondue", "Saindoux", "Shortening", "Spray de cuisson", "Aérosol de cuisson végétal", "Pam"],
-    "fruits": ["Abricots", "Ananas", "Bananes", "Canneberges", "Cantaloup", "Cerises", "Citrons", "Citron vert", "Citrouille", "Cocktail de fruits", "Dattes", "Fraises", "Framboises", "Framboisese", "Kakis", "Mandarines", "Mangue", "Myrtilles", "Orange", "Oranges", "Pêches", "Poires", "Pommes", "Pruneaux", "Pulpe de Bananes", "Pulpe de kaki", "Raisins", "Raisins blancs", "Raisins secs", "Raisins verts", "Raisins violets", "Rhubarbe", "Segments d'orange mandarine", "Segments de mandarine", "Tranches d'ananas"],
-    "légumes": ["Ail", "Artichauts", "Aubergine", "Betteraves", "Brocoli", "Carottes", "Céleri", "Champignons", "Chou", "Chou rouge", "Chou vert", "Chou-fleur", "Châtaignes d'eau", "Concombre", "Courge", "Courgettes", "Câpres", "Échalotes", "Épinards", "Épinards hachés", "Épinards à la crème", "Feuilles de navet", "Haricots", "Haricots rouges", "Haricots verts", "Laitue", "Maïs", "Maïs en crème", "Maïs entier", "Maïs à la crème", "Navets", "Oignon", "Oignon violet", "Oignons", "Oignons frits", "Oignons jaunes", "Oignons rouge", "Oignons verts", "Okra", "Olives", "Patates douces", "Petits pois", "Pois", "Pois chiches", "Pois mange-tout", "Pois à vache", "Poireaux", "Poivron rouge", "Poivron rouges", "Poivron vert", "Poivron verts", "Poivrons", "Pommes de terre", "Pousses de bambou", "Radis", "Tomates", "Zucchini"],
-    "viandes": ["Agneau", "Bacon", "Bifteck", "Bœuf", "Bœuf haché", "Brisket", "Côtelettes de porc", "Dinde", "Foie de veau", "Hamburger", "Hot-dogs", "Jambon", "Os de jambon", "Os à soupe charnus", "Pepperoni", "Porc", "Rôti de Bœuf", "Rôti de palette", "Rôti de porc", "Salami", "Saucisse", "Saucisse d'été", "Saucisse de porc", "Saucisse douce", "Saucisse fumée", "Saucisse piquante", "Saucisse épicée", "Saucisses de Francfort", "Saucisses italiennes douces", "Steak", "Viande hachée", "Viande à ragoût"],
-    "poissons": ["Aiglefin", "Anchois", "Chair de crabe", "Chair de crabe imitée", "Crabe", "Crevettes", "Filet de Colin", "Filet de poisson", "Flet", "Fruits de mer", "Huîtres", "Liquide d'huîtres", "Mulet", "Palourdes", "Poisson blanc ferme", "Pétoncles", "Queues d'écrevisses", "Saumon", "Soupe à la crevette", "Thon", "Têtes de poisson"],
-    "produits laitiers solides (g)": ["Beurre", "Fromage", "Fromage Cheddar", "Fromage Feta", "Fromage Monterey Jack", "Fromage Mozzarella", "Fromage Muenster", "Fromage Parmesan", "Fromage Provolone", "Fromage Ricotta", "Fromage Romano", "Fromage Suisse", "Fromage Velveeta", "Fromage américain", "Fromage au piment", "Fromage bleu", "Fromage cottage", "Fromage râpé", "Fromage à l'ail", "Fromage à la crème", "Fromage à pizza", "Margarine", "Crème", "Crème Carnation", "Crème aigre", "Crème de champignons", "Crème de céleri", "Crème fouettée", "Crème légère", "Crème sure", "Crème épaisse", "Yaourt", "Yaourt au Citrons", "Yaourt aux fruits", "Lait en poudre"],
-    "produits laitiers liquides (ml)": ["Babeurre", "Lait", "Lait concentré", "Lait de coco", "Lait écrémé", "Lait évaporé", "Crème liquide"],
-    "oeufs": ["Œuf", "Blanc d'œuf", "Blancs d'œuf", "Jaunes d'Œuf", "Substitut d'œuf"],
-    "herbes": ["Aneth", "Basilic", "Ciboulette", "Coriandre", "Estragon", "Feuilles de laurier", "Marjolaine", "Origan", "Persil", "Romarin", "Sauge", "Thym"],
-    "épices": ["Ail en poudre", "Anis", "Anisette", "Cannelle", "Cardamome", "Cayenne", "Clous de girofle", "Cumin", "Curcuma", "Curry", "Gingembre", "Graine de moutarde", "Graines de carvi", "Graines de cumin", "Graines de céleri", "Graines de pavot", "Graines de sésame", "Graines de tournesol", "Muscade", "Paprika", "Piment", "Piment de Cayenne", "Piment de la Jamaïque", "Poivre", "Poivre blanc", "Poivre citronné", "Poivre de Cayenne", "Poivre noir", "Poivre rouge moulu", "Quatre-épices", "Racine de gingembre", "Raifort", "Safran", "Sel", "Sel assaisonné", "Sel d'ail", "Sel d'oignon", "Sel de céleri", "Sel gros", "Épice du Moyen-Orient", "Épice jerk", "Épices pour tarte aux pommes", "Épices pour tarte à la citrouille", "Épices à marinades"],
-    "céréales": ["Avoine", "Biscuits", "Chapelure", "Corn Chex", "Cornflakes", "Craquelins Graham", "Craquelins de seigle", "Crackers", "Farine", "Farine à lever", "Germe de blé grillé", "Miettes de biscuits", "Miettes de cornflakes", "Miettes de crackers", "Miettes de craquelins", "Miettes de pain", "Orge perlé", "Pain", "Pain blanc", "Pain de blé complet", "Pain de maïs", "Pain de mie", "Pain de seigle", "Pain français", "Pain grillé", "Pain rassis", "Pains au levain", "Pains de levure", "Petits pains", "Riz", "Riz brun", "Semoule de maïs", "Tapioca", "Tortillas", "Tortillas de maïs", "Wontons chinois", "Wrappers wonton"],
-    "noix": ["Amandes", "Arachides", "Cacahuètes", "Noix", "Noix de cajou", "Noix de coco", "Noix de pécan", "Noix moulues", "Noix mélangées", "Noix noires", "Pistaches"],
-    "pâtisserie": ["Barres Heath", "Biscuits", "Bisquick", "Bits 'O Brickle", "Bonbons", "Bonbons à la menthe poivrée", "Cap'n Crunch", "Cheerios", "Chocolat", "Chocolat au lait", "Choco-bake", "Cool Whip", "Céréales", "Céréales de maïs et de riz", "Doritos", "Dream Whip", "Fleurs en bonbon", "Fruits confits", "Gaufrettes", "Gelée de Pommes", "Gelée de cerise", "Gelée de fraise", "Gelée de groseille", "Gelée de raisin", "Glaçage Orange-Citrons", "Glaçage aux fraises", "Glaçage noix de coco et pécan", "Glaçage à la vanille", "Guimauves", "Gâteau des anges", "Jell-O", "Jell-O à la fraise", "Jell-O à la framboise", "Jello au Citrons", "Life Savers", "Marshmallows", "Miel", "Mini-guimauves", "Mints Frango", "Mélasse", "Oreos", "Pépites de caramel", "Pépites de chocolat", "Pépites de céréales", "Pudding au beurre", "Pudding au chocolat", "Pudding instantané", "Pudding à la vanille", "Pâte de biscuits", "Pâte phyllo", "Pâte sucrée", "Pâte à biscuits", "Pâte à croissants", "Pâte à pizza", "Pâte à tarte", "Sucre", "Sucre brun", "Sucre glace", "Sucre granulé", "Sucre à la cannelle", "Twinkies", "Vers gélifiés"],
-    "sauces": ["Concentré de Tomates", "Ketchup", "Mayonnaise", "Miracle Whip", "Moutarde", "Relish sucrée", "Sauce", "Sauce Alfredo légère", "Sauce Ragu", "Sauce Tabasco", "Sauce Tomates", "Sauce Worcestershire", "Sauce aigre-douce", "Sauce au fromage", "Sauce au poulet", "Sauce aux canneberges", "Sauce barbecue", "Sauce caramel", "Sauce chili", "Sauce enchilada", "Sauce piquante", "Sauce pour steak", "Sauce salsa", "Sauce soja", "Sauce taco", "Sauce tamari", "Sauce à Spaghettis", "Sauce à croquettes", "Sauce à pizza", "Soupe au brocoli et au fromage", "Soupe au boeuf au chili", "Soupe au céleri", "Soupe au fromage", "Soupe au poulet", "Soupe aux champignons", "Soupe aux légumes", "Soupe de Tomates", "Soupe de haricots", "Soupe de nouilles", "Soupe de poulet", "Soupe de tomate", "Soupe à l'oignon", "Soupe à la crevette", "Soupe à la crème", "Soupe à la crème d'oignon", "Soupe à la crème de champignons", "Soupe à la crème de céleri", "Soupe à la crème de poulet", "Tabasco", "Trempette au guacamole", "Vinaigre", "Vinaigre blanc", "Vinaigre de cidre", "Vinaigre de vin", "Vinaigre noir", "Vinaigre rouge", "Vinaigrette", "Vinaigrette Catalina", "Vinaigrette Ranch", "Vinaigrette Thousand Island", "Vinaigrette italienne", "Vinaigrette pour salade", "Vinaigrette russe", "Worcestershire"],
-    "boissons": ["Bière", "Bourbon", "Brandy", "Café", "Chablis", "Cognac", "Ginger ale", "Jus d'ananas", "Jus d'orange", "Jus de Citrons", "Jus de Pommes", "Jus de Tomates", "Jus de cerise", "Jus de citron vert", "Jus de cornichon", "Jus de framboise", "Jus de mandarine", "Jus de pruneau", "Jus de pêche", "Punch Sangaree", "Rhum", "Sherry", "Soda club", "Triple Sec", "Vin blanc", "Vin rouge", "Vodka", "Xérès", "Eau"],
-    "produits pour bébés": ["Nourriture pour bébé aux abricots", "Pots de purée de prunes pour bébés"],
-    "produits chimiques/alimentaires": ["Alun", "Bicarbonate de soude", "Cire de paraffine", "Colorant alimentaire", "Fécule de maïs", "Gélatine", "Gélatine au Citrons", "Levure", "Levure chimique", "Paraffine"],
-    "mélanges préparés": ["Beau Monde", "Beefogetti", "Chicken Tonight", "Chili Hormel", "Farce Stove Top", "Farce au poulet", "Farce aux herbes", "Manwich", "McCormick Salad Supreme", "Mélange Bisquick", "Mélange Gâteau au chocolat", "Mélange Gâteau blanc", "Mélange Hidden Valley Ranch", "Mélange Shake 'n Bake", "Mélange barbecue Shake 'N Bake", "Mélange d'assaisonnement pour tacos", "Mélange d'oignons", "Mélange de Pouding instantané", "Mélange de farce", "Mélange pour Biscuits", "Mélange pour bouillon", "Mélange pour croûte", "Mélange pour muffins de maïs", "Mélange pour pain de maïs", "Mélange pour pudding", "Mélange pour pudding au chocolat", "Mélange pour sauce brune", "Mélange pour soupe de légumes", "Mélange pour soupe à l'oignon", "Mélange pour vinaigrette", "Mélange à Pudding instantané", "Mélange à biscuits", "Mélange à farce", "Mélange à gâteau", "Mélange à soupe au poulet", "Old Bay", "Salad Supreme", "Season-All", "Spatini", "Stove Top"],
-    "arômes et extraits": ["Arôme d'Amandes", "Arôme d'orange", "Arôme de Citrons", "Arôme de courge musquée", "Arôme de noix de beurre", "Arôme de noix de coco", "Arôme de rhum", "Arôme de vanille", "Extrait d'Amandes", "Extrait d'orange", "Extrait de Citrons", "Extrait de rhum", "Extrait de vanille", "Fumée liquide"],
-    "conserves et concentrés": ["Compote de pommes", "Concentré de Tomates", "Concentré de jus d'orange", "Confiture d'abricot", "Confiture d'ananas", "Confiture de mûres", "Consommé", "Consommé de boeuf", "Consommé de poulet", "Purée de prunes", "Purée de tomates", "Pâte de Tomates"],
-    "garnitures": ["Garniture a dessert", "Garniture au caramel", "Garniture fouettée", "Garniture pour tarte", "Garniture à la fraise"],
-    "produits de snacking": ["Bac*Os", "Chips de Tortillas", "Chips de maïs", "Doritos", "Fritos", "Pretzels", "Tater Tots"],
-    "pâtes et nouilles": ["Fettucini", "Linguine", "Macaronis", "Nouilles", "Nouilles Ramen", "Nouilles a lasagne", "Nouilles aux épinards", "Nouilles aux Oeuf", "Nouilles chinoises", "Nouilles chow mein", "Nouilles larges", "Nouilles à dumplings aux Oeuf", "Nouilles à lasagne", "Pasta", "Pâtes", "Pâtes en spirale", "Rigatoni", "Spaghettis", "Tortellini", "Vermicelles"],
-    "produits végétariens": ["Chair de crabe imitée", "Fausse chair de crabe", "Veg-All"],
-    "emballages alimentaires": ["Coquilles", "Croûte à pizza", "Croûtes à tarte", "Croûtons", "Fonds de tarte", "Wontons chinois", "Wrappers wonton"],
-    "édulcorants": ["Édulcorant", "Sirop", "Sirop Karo", "Sirop blanc", "Sirop de chocolat", "Sirop de maïs", "Sirop de maïs Karo", "Sirop sundae au chocolat"],
-    "produits divers": ["Écorce d'Amandes", "Écorce de pastèque", "Milnot", "Pépites de Citrons", "Pouding au Citrons", "Pouding instantané", "Pouding à la vanille", "Poudre d'ail", "Poudre d'oignon", "Poudre de chili", "Poudre de curry", "Poudre de céleri", "Rotel", "V8", "Velveeta"]
+
+CATEGORY_RULES = {
+    "huiles": {"unit": "l", "default": 0.5, "conversions": {"ml": 0.001}},
+    "fruits": {"unit": "g", "default": 100, "conversions": {}},
+    "legumes": {"unit": "g", "default": 100, "conversions": {}},
+    "viande": {"unit": "g", "default": 400, "conversions": {}},
+    "poisson": {"unit": "g", "default": 400, "conversions": {}},
+    "lait": {"unit": "l", "default": 0.5, "conversions": {"ml": 0.001}},
+    "oeuf": {"unit": "number", "default": 1, "conversions": {}},
+    "herbes": {"unit": "g", "default_per_cuillere": 0.5, "conversions": {}},
+    "epices": {"unit": "g", "default_per_cuillere": 0.5, "conversions": {}},
+    "cereales": {"unit": "g", "default": 100, "conversions": {}},
+    "noix": {"unit": "g", "default": 100, "conversions": {}},
+    "patisserie": {"unit": "g", "default": 100, "conversions": {}},
+    "sauce": {"unit": "ml", "default_per_cuillere": 0.25, "conversions": {}},
+    "boisson": {"unit": "l", "default": 0.5, "conversions": {"ml": 0.001}},
+    "autres": {"unit": "number", "default": 1, "conversions": {}}
 }
 
-# oeuf == 50g
+categories = {
+    "huiles": ["Huile", "Huile Crisco", "Huile Mazola", "Huile Wesson", "Huile d'arachide", "Huile d'olive", "Huile de cannelle", "Huile de carthame", "Huile de clou de girofle", "Huile de cuisson", "Huile de maïs", "Huile de maïs soufflé", "Huile de menthe poivrée", "Huile de salade", "Huile de sésame", "Huile végétale", "Crisco", "Crisco fondu", "Shortening", "Shortening au goût de beurre", "Shortening végétal", "Graisse", "Graisse de bacon", "Graisse de viande fondue", "Saindoux", "Matière grasse", "Matière grasse aromatisée au beurre", "Matière grasse solide", "Matière grasse végétale"],
+    "fruits": ["Abricots", "Ananas", "Ananas en dés", "Banane", "Bananes", "Cantaloup", "Cerise au marasquin", "Cerises", "Cerises au marasquin", "Cerises confites", "Cerises marasquin", "Cerises noires dénoyautées", "Citron", "Citron vert", "Citrons", "Citrouille", "Compote de pommes", "Concentré d'ananas", "Concentré de jus d'orange", "Concentré de jus de pomme", "Coquilles", "Dattes", "Fraises", "Fraises fraîches", "Fraises nettoyées", "Fraises surgelées", "Framboise rouge", "Framboises", "Framboises congelées", "Fruit", "Fruits", "Fruits confits", "Fruits confits mélangés", "Gelée de cerise", "Gelée de fraise", "Gelée de fraise Jell-O", "Gelée de groseille", "Gelée de pomme", "Gelée de raisin", "Grenadine", "Jus d'ananas", "Jus d'orange", "Jus de canneberge", "Jus de cerise", "Jus de citron", "Jus de citron vert", "Jus de framboise", "Jus de mandarine", "Jus de pomme", "Jus de pruneau", "Jus de pêche", "Jus de raisin blanc", "Kakis", "Mandarines", "Mangue", "Moitiés de poires", "Morceaux d'ananas", "Mûres fraîches", "Nectar d'abricot", "Orange", "Oranges", "Oranges mandarines", "Pamplemousse", "Pêche", "Pêches", "Pêches tranchées", "Pomme", "Pomme Granny Smith", "Pomme Red Delicious", "Pommes", "Pommes fraîches", "Pommes jaunes", "Pommes non pelées", "Pommes pelées", "Pommes rouges", "Pommes vertes", "Pommes à cuire", "Pruneaux", "Pulpe de banane", "Pulpe de kaki", "Quartiers de citron", "Raisins", "Raisins blancs", "Raisins secs", "Raisins verts", "Raisins violets", "Rhubarbe", "Segments d'orange mandarine", "Segments de mandarine", "Tranches d'ananas"],
+    "legumes": ["Ail", "Artichauts", "Aubergine", "Betteraves", "Brocoli", "Brocoli frais", "Brocoli surgelé", "Brocolis", "Carotte", "Carotte râpée", "Carottes", "Carottes pour bébé", "Céleri", "Champignons", "Champignons frais", "Chou", "Chou rouge", "Chou vert", "Chou-fleur", "Choucroute", "Châtaignes d'eau", "Concombre", "Concombres", "Coquilles Creamette", "Coquilles moyennes", "Courge", "Courge d'été", "Courge jaune", "Courge jaune d'été", "Courges jaunes", "Courgette", "Courgettes", "Courgettes râpées", "Cosses de pois", "Cosses de pois surgelées", "Épinards", "Épinards hachés", "Épinards surgelés", "Épinards à la crème", "épinards congelés", "Fenouil séché", "Feuilles de navet", "Fleurettes de brocoli", "Fleurons de brocoli", "Germes de soja", "Haricots", "Haricots B & M", "Haricots Northern", "Haricots au porc", "Haricots beurre", "Haricots blancs", "Haricots cuits", "Haricots de Lima", "Haricots de Lima jaunes", "Haricots de Lima verts", "Haricots en sauce tomate", "Haricots et porc", "Haricots frits", "Haricots jaunes", "Haricots navy", "Haricots pinto", "Haricots rouges", "Haricots rouges Ranch Style", "Haricots verts", "Haricots verts surgelés", "Laitue", "Laitue romaine", "Laitue râpée", "Légumes", "Légumes Veg-All", "Légumes chop suey", "Légumes mélangés", "Légumes mélangés Veg-All", "Légumes mélangés congelés", "Légumes mélangés surgelés", "Légumes verts", "Maïs", "Maïs congelé", "Maïs doré", "Maïs en crème", "Maïs en grains", "Maïs en grains entiers", "Maïs entier", "Maïs hominy jaune", "Maïs jaune", "Maïs surgelé", "Maïs à la crème", "Navets", "Oignon", "Oignon blanc", "Oignon frais", "Oignon frais émincé", "Oignon rouge", "Oignon vert", "Oignon violet", "Oignons", "Oignons doux", "Oignons frits", "Oignons jaunes", "Oignons verts", "Okra", "Olive noires", "Olives", "Olives noires", "Onion", "Patates douces", "Petits pois", "Petits pois anglais", "Petits pois congelés", "Petits pois doux", "Petits pois verts", "Petits pois verts congelés", "Pieds de champignons", "Piment", "Piment de Cayenne", "Piment de Cayenne rouge", "Piment de la Jamaïque", "Piment fort", "Piment jalapeño", "Piment rouge", "Piment vert", "Piments", "Piments doux", "Piments forts", "Piments jalapeño", "Piments jalapeños", "Piments rouges", "Piments verts", "Poireaux", "Pois", "Pois aux yeux noirs", "Pois cassés verts", "Pois chiches", "Pois de campagne", "Pois mange-tout", "Pois à vache", "Poivron", "Poivron rouge", "Poivron vert", "Poivrons", "Poivrons rouges", "Poivrons rouges doux", "Poivrons verts", "Poivrons verts doux", "Pomme de terre", "Pommes de terre", "Pommes de terre O'Brien", "Pommes de terre blanches", "Pommes de terre irlandaises", "Pommes de terre nouvelles", "Pommes de terre rissolées", "Pommes de terre rissolées congelées", "Pommes de terre rouges", "Pousses de bambou", "Radis", "Tomate", "Tomate fraîche", "Tomates", "Tomates Ro-Tel", "Tomates assaisonnées à l'italienne", "Tomates italiennes", "Tomates à l'italienne", "Tomates étuvées", "Tiges de céleri", "Échalotes"],
+    "viande": ["Agneau", "Bacon", "Bacon canadien", "Beefogetti", "Bifteck", "Bifteck de flanc", "Bœuf", "Bœuf en conserve", "Bœuf fumé", "Bœuf haché", "Bœuf haché extra maigre", "Bœuf haché faible en gras", "Bœuf haché maigre", "Bœuf haché rond", "Bœuf maigre haché", "Bœuf salé", "Bœuf séché", "Bœuf à ragoût", "Cubes de bœuf chuck", "Corned-beef", "Côtelettes de porc", "Demi-Poitrine Poulet", "Dinde", "Dinde hachée", "Escalopes de poulet", "Filet de porc", "Filets de porc", "Hachis de bœuf salé", "Hachis de corned-beef", "Hamburger", "Hamburger maigre", "Hot-dogs", "Jambon", "Jambon cuit", "Jambon fumé", "Jambon râpé", "Kielbasa", "Morceaux de Poulet", "Morceaux de bacon", "Morceaux de poulet", "Os de jambon", "Os à soupe charnus", "Pepperoni", "Pointe de poitrine", "Poitrine de bœuf", "Poitrine de dinde", "Poitrine de poulet", "Poitrines de Poulet", "Poitrines de poulet", "Poitrines de poulet désossées", "Porc", "Porc et haricots", "Porc haché", "Porc salé", "Poule", "Poulet", "Poulet blanc", "Rôti de Bœuf", "Rôti de palette", "Rôti de porc", "Salami", "Saucisse", "Saucisse d'été", "Saucisse de porc", "Saucisse de porc hachée", "Saucisse douce", "Saucisse fumée", "Saucisse piquante", "Saucisse épicée", "Saucisses de Francfort", "Saucisses italiennes douces", "Steak", "Steaks", "Viande de bœuf en conserve", "Viande de poulet blanc", "Viande hachée", "Viande à ragoût"],
+    "poisson": ["Aiglefin", "Chair de crabe", "Chair de crabe imitée", "Crabe", "Crevettes", "Fausse chair de crabe", "Filet de Colin", "Filet de poisson", "Flet", "Huîtres", "Liquide d'huîtres", "Mulet", "Palourdes", "Poisson blanc ferme", "Pétoncles", "Queues d'écrevisses", "Saumon", "Saumon rose", "Thon", "Têtes de poisson"],
+    "lait": ["Babeurre", "Babeurre sans gras", "Beurre", "Beurre d'arachide", "Beurre de cacahuète", "Beurre de cacahuète croquant", "Beurre de cacahuète lisse", "Beurre non salé", "Crème", "Crème Carnation", "Crème aigre", "Crème de champignons", "Crème de céleri", "Crème de guimauve", "Crème de menthe", "Crème de tartre", "Crème en poudre non laitière", "Crème fouettée", "Crème glacée", "Crème liquide", "Crème légère", "Crème moitié-moitié", "Crème sure", "Crème à fouetter", "Crème épaisse", "Fromage", "Fromage Cheddar", "Fromage Feta", "Fromage Monterey Jack", "Fromage Mozzarella", "Fromage Muenster", "Fromage Parmesan", "Fromage Provolone", "Fromage Ricotta", "Fromage Romano", "Fromage Suisse", "Fromage Velveeta", "Fromage américain", "Fromage au piment", "Fromage bleu", "Fromage cheddar", "Fromage cheddar allégé", "Fromage cheddar fort", "Fromage cottage", "Fromage cottage faible en gras", "Fromage fort", "Fromage lite-line", "Fromage mozzarella", "Fromage parmesan", "Fromage ricotta", "Fromage romano", "Fromage râpé", "Fromage suisse", "Fromage à l'ail", "Fromage à la crème", "Fromage à la crème Philadelphia", "Fromage à pizza", "Lait", "Lait Borden", "Lait Eagle Brand", "Lait Pet", "Lait aigre", "Lait chaud", "Lait concentré", "Lait concentré sucré", "Lait de coco", "Lait doux", "Lait en poudre", "Lait entier", "Lait faible en gras", "Lait froid", "Lait sucré", "Lait tiède", "Lait écrémé", "Lait écrémé évaporé", "Lait évaporé", "Margarine", "Margarine Parkay", "Milnot", "Mozzarella", "Parmesan", "Velveeta", "Yaourt", "Yaourt au citron", "Yaourt aux fruits", "Yaourt nature sans gras", "Yaourt sans gras"],
+    "oeuf": ["Blanc d'œuf", "Blancs d'œufs", "Jaune d'œuf", "Jaunes d'œufs", "Oeuf", "Œuf", "Œufs", "Substitut d'œuf"],
+    "herbes": ["Aneth", "Aneth frais", "Basilic", "Basilic doux", "Basilic estragon", "Ciboulette", "Coriandre", "Estragon", "Feuille de laurier", "Feuilles de laurier", "Marjolaine", "Origan", "Persil", "Persil frais", "Persil vert", "Romarin", "Sauge", "Thym"],
+    "epices": ["Accent", "Ail", "Anis", "Anisette", "Assaisonnement Salad Supreme", "Assaisonnement aromatisé barbecue", "Assaisonnement italien", "Assaisonnement pour chili", "Assaisonnement pour pizza", "Assaisonnement pour salade", "Assaisonnement pour steak", "Assaisonnement pour tacos", "Assaisonnement pour volaille", "Arôme d'amande", "Arôme d'orange", "Arôme de citron", "Arôme de courge musquée", "Arôme de noix de beurre", "Arôme de noix de coco", "Arôme de rhum", "Arôme de vanille", "Beau Monde", "Bitters", "Cacao", "Cacao en poudre", "Cannelle", "Cannelle moulue", "Cardamome", "Cayenne", "Clous de girofle", "Clous de girofle moulus", "Colorant", "Colorant achiote", "Colorant alimentaire", "Colorant alimentaire jaune", "Colorant alimentaire rouge", "Cumin", "Cumin moulu", "Curcuma", "Curry", "Extrait d'amande", "Extrait d'orange", "Extrait de citron", "Extrait de rhum", "Extrait de vanille", "Fenouil séché", "Fumée liquide", "Gingembre", "Gingembre en poudre", "Gingembre frais", "Gingembre moulu", "Gingembre râpé", "Gousse d'ail", "Gousses d'ail", "Graine de moutarde", "Graines de carvi", "Graines de cumin", "Graines de céleri", "Graines de lin", "Graines de pavot", "Graines de sésame", "Graines de sésame blanches", "Graines de tournesol", "Grains de poivre", "Mélange Hidden Valley Ranch", "Mélange Shake 'n Bake", "Mélange barbecue Shake 'N Bake", "Mélange d'assaisonnement pour tacos", "Mélange d'oignons", "Mélange pour sauce brune", "Mélange pour sauce stroganoff", "Mélange pour vinaigrette", "Mélange à vinaigrette", "Moutarde", "Moutarde de Dijon", "Moutarde sèche", "Moutarde séchée", "Moutarde à gros grains", "Muscade", "Muscade moulue", "Old Bay", "Paprika", "Paprika espagnol", "Piment de Cayenne", "Piment de Cayenne rouge", "Piment de la Jamaïque", "Piment de la Jamaïque moulu", "Poivre", "Poivre blanc", "Poivre blanc moulu", "Poivre citronné", "Poivre de Cayenne", "Poivre moulu", "Poivre noir", "Poivre noir moulu", "Poivre rouge moulu", "Poudre d'ail", "Poudre d'oignon", "Poudre de chili", "Poudre de curry", "Poudre de céleri", "Poudre de zeste de citron", "Quatre-épices", "Raifort", "Safran", "Sel", "Sel assaisonné", "Sel d'ail", "Sel d'oignon", "Sel de céleri", "Sel gemme", "Sel gros", "Sel à l'ail", "Tabasco", "Vanille", "Vinaigre", "Vinaigre blanc", "Vinaigre de cidre", "Vinaigre de vin", "Vinaigre de vin rouge", "Vinaigre noir", "Vinaigre rouge", "Worcestershire", "Zeste de citron", "Épice du Moyen-Orient", "Épice jerk", "Épices pour tarte aux pommes", "Épices pour tarte à la citrouille", "Épices à marinade", "Épices à marinades"],
+    "cereales": ["Avoine", "Avoine à cuisson rapide", "Biscuits", "Biscuits Graham", "Biscuits Oreo", "Biscuits Ritz", "Biscuits au babeurre", "Biscuits au beurre", "Biscuits de riz soufflé", "Biscuits feuilletés", "Biscuits froids", "Biscuits graham", "Biscuits salés", "Biscuits sandwich au chocolat", "Biscuits soda", "Bisquick", "Bretzels", "Brioches surgelées", "Bâtonnets de pain", "Chapelure", "Chapelure italienne", "Cheerios", "Corn Chex", "Corn flakes", "Cornflakes", "Craquelins Graham", "Craquelins de seigle", "Crackers", "Crackers Ritz", "Croissants", "Croissants en pâte", "Croûte de biscuits Graham", "Croûte de tarte", "Croûte de tarte aux biscuits Graham", "Croûte de tarte en biscuits Graham", "Croûte à pizza", "Croûte à tarte", "Croûte à tarte crue", "Croûtes de biscuits Graham", "Croûtes à tarte", "Croûtes à tarte en biscuits Graham", "Croûtons", "Croûtons assaisonnés", "Farine", "Farine White Lily", "Farine autolevante", "Farine de blé complet", "Farine de maïs", "Farine tout usage", "Farine à gâteau", "Farine à lever", "Farine à pain", "Flocons d'avoine", "Flocons de maïs", "Flocons de noix de coco", "Germe de blé grillé", "Mélange Bisquick", "Mélange Gâteau au chocolat", "Mélange Gâteau blanc", "Mélange de farce", "Mélange de farce assaisonné aux herbes", "Mélange de farce aux herbes", "Mélange pour biscuits au babeurre", "Mélange pour pain de maïs", "Mélange à biscuits", "Mélange à farce", "Mélange à gâteau", "Mélange à gâteau au beurre", "Mélange à gâteau au chocolat", "Mélange à gâteau blanc", "Mélange à gâteau jaune", "Mélange à gâteau suprême au citron", "Mélange à gâteau à la fraise", "Mélange à muffins de maïs", "Mélange à pain de maïs", "Miettes de biscuits Graham", "Miettes de biscuits Ritz", "Miettes de biscuits graham", "Miettes de cornflakes", "Miettes de crackers", "Miettes de craquelins", "Miettes de pain", "Miettes de pain de seigle", "Muffins anglais", "Nouilles", "Nouilles Ramen", "Nouilles aux épinards", "Nouilles aux œufs", "Nouilles chinoises", "Nouilles chow mein", "Nouilles larges", "Nouilles à dumplings aux œufs", "Nouilles à lasagne", "Orge perlé", "Pain", "Pain blanc", "Pain de blé complet", "Pain de maïs", "Pain de mie", "Pain de seigle", "Pain français", "Pain grillé", "Pain rassis", "Pains au levain", "Pains de levure", "Pasta", "Pâtes", "Pâtes en spirale", "Petits pains", "Petits pains réfrigérés", "Pretzels", "Rice Chex", "Rice Krispies", "Rigatoni", "Riz", "Riz Minute blanc", "Riz arborio", "Riz brun", "Riz espagnol", "Riz instantané", "Riz sauvage", "Riz à l'espagnole", "Semoule de maïs", "Spaghetti", "Spaghettis", "Spaghettis fins", "Tortilla de maïs", "Tortillas", "Tortillas de farine", "Tortillas de maïs", "Tranches de Pain", "Vermicelles", "Wheat Chex", "Wontons chinois", "Wrappers wonton"],
+    "noix": ["Amande", "Amandes", "Amandes effilées", "Amandes moulues", "Arachides", "Beurre d'arachide", "Beurre de cacahuète", "Beurre de cacahuète croquant", "Beurre de cacahuète lisse", "Cacahuètes", "Noix", "Noix de cajou", "Noix de coco", "Noix de coco Angel Flake", "Noix de coco congelée", "Noix de coco en flocons", "Noix de coco râpée", "Noix de muscade", "Noix de pécan", "Noix moulues", "Noix mélangées", "Noix noires", "Pépites de caramel", "Pépites de caramel au beurre", "Pépites de chocolat", "Pépites de chocolat mi-sucré", "Pépites de chocolat sucré", "Pépites de citron", "Pépites de céréales", "Tasses de beurre de cacahuète", "Écorce d'amande"],
+    "patisserie": ["Barres Heath", "Bonbons M&M", "Bonbons multicolores", "Bonbons à l'orange", "Bonbons à la menthe poivrée", "Chips de maïs", "Chips de tortilla", "Choco-bake", "Chocolat", "Chocolat au lait", "Chocolat mi-sucré", "Chocolat non sucré", "Chocolat à cuire", "Confiture d'abricot", "Confiture d'ananas", "Confiture de mûres", "Cool Whip", "Cool whip", "Doritos", "Dream Whip", "Fruits de mer", "Garniture a dessert", "Garniture au caramel", "Garniture fouetté", "Garniture fouettée", "Garniture fouettée non laitière", "Garniture pour tarte", "Garniture pour tarte aux cerises", "Garniture pour tarte aux myrtilles", "Garniture pour tarte à la pistache", "Garniture à la fraise", "Gaufrettes au chocolat", "Gaufrettes à la vanille", "Gelée de cerise", "Gelée de fraise", "Gelée de fraise Jell-O", "Gelée de groseille", "Gelée de pomme", "Gelée de raisin", "Gingembre", "Gingembre en poudre", "Gingembre frais", "Gingembre moulu", "Gingembre râpé", "Glaçage Orange-Citron", "Glaçage aux fraises", "Glaçage noix de coco et pécan", "Glaçage à la vanille", "Guimauves", "Gâteau des anges", "Gélatine", "Gélatine aromatisée", "Gélatine au citron", "Gélatine au citron vert", "Gélatine d'abricot", "Gélatine de fraise", "Gélatine non aromatisée", "Gélatine sans saveur", "Gélatine à l'orange", "Gélatine à la fraise", "Gélatine à la lime", "Gélatine à saveur d'orange", "Gélatine à saveur de cerise", "Jell-O", "Jell-O au citron", "Jell-O au citron vert", "Jell-O à la fraise", "Jell-O à la framboise", "Jello au citron", "Jello à l'orange", "Jello à la fraise", "Life Savers", "Marshmallow Fluff", "Marshmallows", "Mints Frango", "Mini-guimauves", "Mélange pouding au chocolat", "Mélange pour pudding au chocolat", "Mélange à pudding instantané à la vanille", "Mélange à pudding à la vanille", "Nourriture pour bébé aux abricots", "Oreos", "Pâte de biscuits", "Pâte de tomate", "Pâte phyllo", "Pâte sucrée de base", "Pâte à biscuits", "Pâte à biscuits au sucre", "Pâte à croissants", "Pâte à pizza réfrigérée", "Pâte à tarte", "Pouding au citron", "Pouding instantané", "Pouding instantané au chocolat", "Pouding instantané au citron", "Pouding instantané à la noix de coco", "Pouding instantané à la pistache", "Pouding instantané à la vanille", "Pouding à la vanille", "Pouding à la vanille instantané", "Pots de purée de prunes pour bébés", "Pudding au beurre écossais", "Pudding au chocolat", "Pudding instantané au chocolat", "Pudding instantané à la vanille", "Pudding à la vanille", "Relish sucrée", "Sirop", "Sirop Karo", "Sirop blanc", "Sirop de chocolat", "Sirop de grenadine", "Sirop de maïs", "Sirop de maïs blanc", "Sirop de maïs blanc Karo", "Sirop de maïs léger", "Sirop sundae au chocolat", "Sucre", "Sucre blanc", "Sucre brun", "Sucre brun clair", "Sucre glace", "Sucre granulé", "Sucre à la cannelle", "Twinkies", "bonbons Skor"],
+    "sauce": ["BBQ au bœuf", "BBQ au porc", "Bac*Os", "Bouillon de bœuf", "Bouillon de jambon", "Bouillon de poulet", "Bouillon de poulet condensé", "Bouillon de poulet instantané", "Cheez Whiz", "Chicken Tonight", "Chili Hormel", "Consommé", "Consommé de bœuf", "Consommé de poulet", "Cubes de bouillon de poulet", "Farce Stove Top", "Farce au poulet", "Farce aux herbes", "Fond de tarte", "Fonds de tarte", "Fonds de tarte en biscuits Graham", "Guacamole", "Ketchup", "Manwich", "Mayonnaise", "Mayonnaise Miracle Whip", "Mayonnaise sans gras", "Miracle Whip", "Mélange de pouding instantané à la pistache", "Mélange de soupe aux légumes", "Mélange pour bouillon", "Mélange pour croûte", "Mélange pour gâteau au beurre", "Mélange pour gâteau blanc deluxe", "Mélange pour gâteau jaune", "Mélange pour muffins au maïs", "Mélange pour muffins de maïs", "Mélange pour sauce brune", "Mélange pour sauce stroganoff", "Mélange pour soupe de légumes", "Mélange pour soupe à l'oignon", "Mélange pour vinaigrette", "Mélange à soupe au poulet", "Mélange à soupe à l'oignon", "Mélange à vinaigrette", "Pâte de tomate", "Purée de prunes", "Purée de pêches", "Purée de tomates", "Ragu", "Ro-Tel", "Rotel", "Salsa", "Salsa taco", "Sauce", "Sauce Alfredo légère", "Sauce Ragu", "Sauce Tabasco", "Sauce Worcestershire", "Sauce aigre-douce", "Sauce au fromage", "Sauce au piment fort", "Sauce au piment liquide", "Sauce au piment rouge", "Sauce au poulet", "Sauce aux canneberges", "Sauce barbecue", "Sauce caramel", "Sauce chili", "Sauce enchilada", "Sauce picante", "Sauce piquante", "Sauce pour steak", "Sauce salsa", "Sauce salsa au piment vert", "Sauce soja", "Sauce taco", "Sauce tamari", "Sauce tomate", "Sauce à croquettes", "Sauce à pizza", "Sauce à spaghetti", "Sauce à spaghettis", "Sauce à la crevette", "Sauce à la crème", "Sauce à la crème d'oignon", "Sauce à la crème de champignons", "Sauce à la crème de céleri", "Sauce à la crème de poulet", "Sauce à la tomate", "Soupe au brocoli et au fromage", "Soupe au bœuf au chili", "Soupe au céleri", "Soupe au fromage", "Soupe au fromage Cheddar", "Soupe au poulet", "Soupe aux champignons", "Soupe aux légumes", "Soupe aux tomates", "Soupe d'oignon", "Soupe de haricots Campbell's", "Soupe de nouilles", "Soupe de poulet", "Soupe de tomate", "Soupe à l'oignon", "Soupe à la crevette", "Soupe à la crème", "Soupe à la crème d'oignon", "Soupe à la crème de champignons", "Soupe à la crème de céleri", "Soupe à la crème de poulet", "Soupe à la tomate", "Stove Top", "Trempette au guacamole", "Vinaigrette", "Vinaigrette Miracle Whip", "Vinaigrette Ranch", "Vinaigrette Thousand Island", "Vinaigrette italienne", "Vinaigrette pour salade", "Vinaigrette russe"],
+    "boisson": ["7-Up", "Bière", "Bourbon", "Brandy", "Café", "Café instantané", "Café instantané en poudre", "Café noir", "Chablis", "Champagne", "Coca-Cola", "Cocktail de fruits", "Cocktail de jus de canneberge", "Cognac", "Country Time Lemonade", "Eau", "Eau bouillante", "Eau chaude", "Eau froide", "Eau minérale pétillante", "Eau pétillante", "Eau tiède", "Ginger ale", "Jus de tomate", "Kool-Aid", "Kool-Aid cerise", "Limonade Country Time", "Limonade congelée", "Limonade surgelée", "Mountain Dew", "Punch Sangaree", "Rhum", "Rhum Meyers", "Sherry", "Soda citron-lime", "Soda club", "Sprite", "Tang", "Thé instantané", "Triple Sec", "V8", "Vin blanc", "Vin de cuisson sherry", "Vin rouge", "Vin rouge espagnol", "Vodka", "Whisky", "Xérès"],
+    "autres": ["Alun", "Bleu de lessive", "Bol en verre transparent", "Cire de paraffine", "Cube de glace", "Glace", "Glace pilée", "Glace à la vanille", "Paraffine", "Spray de cuisson", "Spray de cuisson végétal", "Spray de cuisson végétal antiadhésif", "Édulcorant"]
+}
+
 def parse_quantity(ingredient_str):
     """Parse quantity from ingredient string"""
     parts = ingredient_str.split()
@@ -927,12 +876,50 @@ def parse_quantity(ingredient_str):
             return float(part)
     return 1
 
+def parse_unit(ingredient_str):
+    """Parse unit from ingredient string"""
+    units = ["g", "kg", "ml", "l", "cuillère", "cuillères", "tasse", "tasses"]
+    parts = ingredient_str.split()
+    for part in parts:
+        if part in units:
+            if part in ["cuillère", "cuillères"]:
+                return "cuillere"
+            return part
+    return ""
+
 def get_category(item):
     """Find which category an item belongs to"""
     for category, items in categories.items():
         if item in items:
             return category
     return "autres"
+
+def convert_quantity(qty, from_unit, to_unit, category):
+    """Convert between units"""
+    if from_unit == to_unit:
+        return qty
+    
+    if from_unit in CATEGORY_RULES[category]["conversions"]:
+        return qty * CATEGORY_RULES[category]["conversions"][from_unit]
+    
+    return qty
+def get_standard_quantity(ingredient_str, category):
+    """Get quantity in standard units for the category"""
+    qty = parse_quantity(ingredient_str)
+    unit = parse_unit(ingredient_str)
+    
+    # Handle spoon measurements first
+    if category in ["herbes", "epices", "sauce"] and unit == "cuillere":
+        return qty * CATEGORY_RULES[category].get("default_per_cuillere", 0.5)
+    
+    # Handle case where no unit is specified
+    if qty == 1 and unit == "":
+        return CATEGORY_RULES[category].get("default", 
+               CATEGORY_RULES[category].get("default_per_cuillere", 1))
+    
+    # Handle unit conversions
+    target_unit = CATEGORY_RULES[category]["unit"]
+    return convert_quantity(qty, unit, target_unit, category)
 
 def clean_and_categorize_ingredients(meal_plan):
     """Categorize all ingredients in the meal plan"""
@@ -956,11 +943,11 @@ def extract_quantities(meal_plan, categorized):
         for meal in day_data:
             for ingredient, ingredient_str in zip(meal["NER"], meal["ingredients"]):
                 category = get_category(ingredient)
-                std_qty = parse_quantity(ingredient_str)
+                std_qty = get_standard_quantity(ingredient_str, category)
                 quantities[category].append({
                     "name": ingredient,
                     "quantity": std_qty,
-                    "unit": "g"
+                    "unit": CATEGORY_RULES[category]["unit"]
                 })
     
     return dict(quantities)
@@ -975,14 +962,7 @@ def flatten_quantities(extracted):
             item_counts[item["name"]] += item["quantity"]
         
         for name, qty in item_counts.items():
-            no_unit = ["herbes", "epices"]
-            if category in no_unit:
-                flattened[category].append(f"{name}")
-            elif category in ["huiles", "sauces"]:
-                flattened[category].append(f"{name}: {qty} ml")
-            else:
-                flattened[category].append(f"{name}: {qty} g")
-
+            flattened[category].append(f"{name}: {qty} {CATEGORY_RULES[category]['unit']}")
     
     return dict(flattened)
 
@@ -997,29 +977,15 @@ def subtract_inventory(flattened, inventory):
     
     for category, items in flattened.items():
         for item_str in items:
-            no_unit = ["herbes", "epices"]
-            if category not in no_unit:
-                name, rest = item_str.split(":", 1)
-                current_qty = float(rest.split()[0])
-                unit = rest.split()[1]
-                
-                inv_qty = inventory_items.get(name.strip().lower(), 0)
-                remaining_qty = max(0, current_qty - inv_qty)
-                
-                if remaining_qty > 0:
-                    if category in ["huiles", "produits laitiers liquides (ml)"]:
-                        final_list[category].append(f"{name}: {remaining_qty // 250 + (1 if remaining_qty % 1000 != 0 else 0)} bouteille")
-                    else:
-                        if name == "Œuf":
-                            final_list[category].append(f"{name}: {int(remaining_qty/50)}")
-                        elif name == "Eau":
-                            continue
-                        elif remaining_qty>1000 and unit == "g":
-                            final_list[category].append(f"{name}: {remaining_qty/1000} kg")
-                        else:
-                            final_list[category].append(f"{name}: {remaining_qty} {unit}")
-            else:
-                final_list[category].append(f"{item_str}")
+            name, rest = item_str.split(":", 1)
+            current_qty = float(rest.split()[0])
+            unit = rest.split()[1]
+            
+            inv_qty = inventory_items.get(name.strip().lower(), 0)
+            remaining_qty = max(0, current_qty - inv_qty)
+            
+            if remaining_qty > 0:
+                final_list[category].append(f"{name}: {remaining_qty} {unit}")
     
     return dict(final_list)
 
@@ -1035,30 +1001,32 @@ def get_shopping_list():
     if not meal_plan:
         return jsonify({"error": "Missing meal_plan in request"}), 400
 
+    # Get categorized ingredients (we still need this for extract_quantities)
     categorized, _ = clean_and_categorize_ingredients(meal_plan)
     
-    extracted = extract_quantities(meal_plan, categorized)  
+    # Process quantities
+    extracted = extract_quantities(meal_plan, categorized)  # Now passing both required arguments
     flattened = flatten_quantities(extracted)
     
     # Subtract inventory if provided
     final_list = subtract_inventory(flattened, inventory) if inventory else flattened
     
     # Clean the output by removing "number" units
-    # cleaned_list = {}
-    # for category, items in final_list.items():
-    #     cleaned_items = []
-    #     for item in items:
-    #         if ": " in item:
-    #             name, quantity = item.split(": ", 1)
-    #             if quantity.endswith(" number"):
-    #                 cleaned_items.append(f"{name}: {quantity[:-7]}")  # Remove " number"
-    #             else:
-    #                 cleaned_items.append(item)
-    #         else:
-    #             cleaned_items.append(item)
-    #     cleaned_list[category] = cleaned_items
+    cleaned_list = {}
+    for category, items in final_list.items():
+        cleaned_items = []
+        for item in items:
+            if ": " in item:
+                name, quantity = item.split(": ", 1)
+                if quantity.endswith(" number"):
+                    cleaned_items.append(f"{name}: {quantity[:-7]}")  # Remove " number"
+                else:
+                    cleaned_items.append(item)
+            else:
+                cleaned_items.append(item)
+        cleaned_list[category] = cleaned_items
     
-    return jsonify(final_list)
+    return jsonify(cleaned_list)
 
 
 if __name__ == "__main__":
