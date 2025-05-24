@@ -274,10 +274,10 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None):
                         matched_ingredients.append((inv_ing, recipe_ing))
                         break
             ingredient_scores[valid_recipes.index.get_loc(recipe.name)] = matches
-            # print(f"Recette '{recipe['title']}': {matches} correspondances -> {matched_ingredients}")
+            print(f"Recette '{recipe['title']}': {matches} correspondances -> {matched_ingredients}")
         max_score = ingredient_scores.max() if ingredient_scores.max() > 0 else 1
         ingredient_scores = ingredient_scores / max_score
-        # print(f"Scores d'ingrédients calculés : min={ingredient_scores.min()}, max={ingredient_scores.max()}, max_score brut={max_score}")
+        print(f"Scores d'ingrédients calculés : min={ingredient_scores.min()}, max={ingredient_scores.max()}, max_score brut={max_score}")
 
     valid_meal_types = list(encoder.classes_)
     # print(f"Valid meal types for selection: {valid_meal_types}")
@@ -338,8 +338,10 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None):
                             print(f"Impossible de sélectionner dans valid_indices vide pour {type_plat} le {day}")
                             continue
                     else:
+                        #print(f"ici")
                         valid_probs = valid_probs / valid_probs.sum()
                         if ingredient_scores is not None:
+                            #print(f"ici")
                             valid_scores = ingredient_scores[:len(valid_indices)]
                             valid_probs = valid_probs * (0.5 + 0.5 * valid_scores)
                             valid_probs = valid_probs / valid_probs.sum()
@@ -1023,7 +1025,9 @@ def subtract_inventory(flattened, inventory):
                         final_list[category].append(f"{name}: {remaining_qty // 250 + (1 if remaining_qty % 1000 != 0 else 0)} bouteille")
                     else:
                         if name == "Œuf":
-                            final_list[category].append(f"{name}: {int(remaining_qty/50)}")
+                            total_eggs = int(remaining_qty / 50)
+                            #final_list[category].append(f"{name}: {int(remaining_qty/50)}")
+                            final_list[category].append(f"{name}: {int(total_eggs / 12)} boîtes de 12")
                         elif name == "Eau":
                             continue
                         elif remaining_qty>1000 and unit == "g":
