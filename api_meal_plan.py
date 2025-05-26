@@ -359,32 +359,38 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None):
                             print(f"Impossible de sélectionner dans valid_indices vide pour {type_plat} le {day}")
                             continue
                     else:
-                        #print(f"ici")
-                        valid_probs = valid_probs / valid_probs.sum()
                         if ingredient_scores is not None:
-                            #print(f"ici")
+                            # Sélectionner les indices avec le score maximal parmi valid_indices
                             valid_scores = ingredient_scores[:len(valid_indices)]
-                            valid_probs = valid_probs * (0.5 + 0.5 * valid_scores)
-                            valid_probs = valid_probs / valid_probs.sum()
-                        
-                        sequential_indices = list(range(len(valid_indices)))
-                        for _ in range(10):
-                            try:
-                                seq_index = np.random.choice(sequential_indices, p=valid_probs)
-                                recette_index = valid_indices[seq_index]
-                                if recette_index not in daily_selected_indices:
-                                    break
-                            except (ValueError, IndexError) as e:
-                                print(f"Erreur lors de la sélection aléatoire: {e}")
-                                continue
+                            max_score = valid_scores.max()
+                            max_score_indices = [valid_indices[i] for i in range(len(valid_indices)) if valid_scores[i] == max_score and valid_indices[i] not in daily_selected_indices]
+                            if not max_score_indices:
+                                print(f"Aucun indice avec score maximal disponible pour {type_plat} le {day}, sélection aléatoire parmi valid_indices")
+                                recette_index = random.choice(valid_indices)
+                            else:
+                                recette_index = random.choice(max_score_indices)
+                                print(f"Sélection de la recette avec score maximal {max_score} pour {type_plat} le {day}: index {recette_index}")
                         else:
-                            try:
-                                seq_index = np.random.choice(sequential_indices, p=valid_probs)
-                                recette_index = valid_indices[seq_index]
-                            except (ValueError, IndexError) as e:
-                                print(f"Erreur lors de la sélection aléatoire finale: {e}")
-                                continue
-
+                            # Si pas de scores d'ingrédients, utiliser les probabilités prédites
+                            valid_probs = valid_probs / valid_probs.sum()
+                            sequential_indices = list(range(len(valid_indices)))
+                            for _ in range(10):
+                                try:
+                                    seq_index = np.random.choice(sequential_indices, p=valid_probs)
+                                    recette_index = valid_indices[seq_index]
+                                    if recette_index not in daily_selected_indices:
+                                        break
+                                except (ValueError, IndexError) as e:
+                                    print(f"Erreur lors de la sélection aléatoire: {e}")
+                                    continue
+                            else:
+                                try:
+                                    seq_index = np.random.choice(sequential_indices, p=valid_probs)
+                                    recette_index = valid_indices[seq_index]
+                                except (ValueError, IndexError) as e:
+                                    print(f"Erreur lors de la sélection aléatoire finale: {e}")
+                                    continue
+                
                 # Second branch - else case
                 else:
                     valid_indices = list(range(len(df)))
