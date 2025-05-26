@@ -260,25 +260,25 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None):
         print(f"Nombre de repas par jour (par défaut) : {meals_per_day}")
 
     # Calculate ingredient scores if inventory_ingredients is provided
-    ingredient_scores = None
-    if inventory_ingredients:
-        print(inventory_ingredients)
-        ingredient_scores = np.zeros(len(valid_recipes))
-        for idx, recipe in valid_recipes.iterrows():
-            recipe_ingredients = [ing for ing in recipe["ingredients"]]
-            matches = 0
-            matched_ingredients = []
-            for inv_ing in inventory_ingredients:
-                for recipe_ing in recipe_ingredients:
-                    if fuzz.partial_ratio(inv_ing, recipe_ing) > 80:
-                        matches += 1
-                        matched_ingredients.append((inv_ing, recipe_ing))
-                        break
-            ingredient_scores[valid_recipes.index.get_loc(recipe.name)] = matches
-            print(f"Recette '{recipe['title']}': {matches} correspondances -> {matched_ingredients}")
-        max_score = ingredient_scores.max() if ingredient_scores.max() > 0 else 1
-        ingredient_scores = ingredient_scores / max_score
-        print(f"Scores d'ingrédients calculés : min={ingredient_scores.min()}, max={ingredient_scores.max()}, max_score brut={max_score}")
+    #ingredient_scores = None
+    #if inventory_ingredients:
+    #    print(inventory_ingredients)
+    #    ingredient_scores = np.zeros(len(valid_recipes))
+    #    for idx, recipe in valid_recipes.iterrows():
+    #        recipe_ingredients = [ing for ing in recipe["ingredients"]]
+    #        matches = 0
+    #        matched_ingredients = []
+    #        for inv_ing in inventory_ingredients:
+    #            for recipe_ing in recipe_ingredients:
+    #                if fuzz.partial_ratio(inv_ing, recipe_ing) > 80:
+    #                    matches += 1
+    #                    matched_ingredients.append((inv_ing, recipe_ing))
+    #                    break
+    #        ingredient_scores[valid_recipes.index.get_loc(recipe.name)] = matches
+    #        print(f"Recette '{recipe['title']}': {matches} correspondances -> {matched_ingredients}")
+    #    max_score = ingredient_scores.max() if ingredient_scores.max() > 0 else 1
+    #    ingredient_scores = ingredient_scores / max_score
+    #    print(f"Scores d'ingrédients calculés : min={ingredient_scores.min()}, max={ingredient_scores.max()}, max_score brut={max_score}")
 
     valid_meal_types = list(encoder.classes_)
     # print(f"Valid meal types for selection: {valid_meal_types}")
@@ -289,6 +289,26 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None):
         daily_selected_indices = set()
 
         for _ in range(num_meals):
+            ingredient_scores = None
+            if inventory_ingredients:
+                print(inventory_ingredients)
+                ingredient_scores = np.zeros(len(valid_recipes))
+                for idx, recipe in valid_recipes.iterrows():
+                    recipe_ingredients = [ing for ing in recipe["ingredients"]]
+                    matches = 0
+                    matched_ingredients = []
+                    for inv_ing in inventory_ingredients:
+                        for recipe_ing in recipe_ingredients:
+                            if fuzz.partial_ratio(inv_ing["name"], recipe_ing) > 90:
+                                matches += 1
+                                matched_ingredients.append((inv_ing["name"], recipe_ing))
+                                break
+                    ingredient_scores[valid_recipes.index.get_loc(recipe.name)] = matches
+                    print(f"Recette '{recipe['title']}': {matches} correspondances -> {matched_ingredients}")
+                max_score = ingredient_scores.max() if ingredient_scores.max() > 0 else 1
+                ingredient_scores = ingredient_scores / max_score
+                print(f"Scores d'ingrédients calculés : min={ingredient_scores.min()}, max={ingredient_scores.max()}, max_score brut={max_score}")
+
             type_plat = random.choice(valid_meal_types)
             try:
                 type_plat_encoded = encoder.transform([type_plat])[0]
@@ -429,6 +449,33 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None):
                         "time": int(recette["time"]),
                         "servings": int(recette["servings"])
                     })
+                    if inventory_ingredients:
+                        recipe_ingredients = recette.get("ingredients", []) 
+                        for inv_ing in inventory_ingredients[:]:  
+                            for recipe_ing in recipe_ingredients:
+                                recipe_ing_name = re.sub(r'^\d+(\.\d+)?\s*(g|ml|kg)?\s*', '', recipe_ing, flags=re.IGNORECASE).strip()
+                                if fuzz.partial_ratio(inv_ing["name"].lower(), recipe_ing_name.lower()) > 90:
+                                    recipe_qty = parse_quantity(recipe_ing)
+                                    recipe_category = get_category(recipe_ing_name)
+                                    inv_category = get_category(inv_ing["name"])
+                                    if recipe_category == inv_category:
+                                        try:
+                                            inv_quantity = float(inv_ing["quantity"])
+                                            inv_quantity -= recipe_qty
+                                            if inv_quantity <= 0:
+                                                inventory_ingredients.remove(inv_ing)
+                                                print(f"Ingrédient '{inv_ing['name']}' épuisé et retiré de l'inventaire")
+                                            else:
+                                                inv_ing["quantity"] = str(int(inv_quantity) if inv_category in ["legumes", "fruits", "autres"] and inv_ing["type_quantity"] == "" else inv_quantity)
+                                                print(f"Ingrédient '{inv_ing['name']}' mis à jour: nouvelle quantité = {inv_ing['quantity']} {inv_ing['type_quantity']}")
+                                            break
+                                        except ValueError:
+                                            print(f"Quantité invalide pour '{inv_ing['name']}' (inventaire: {inv_ing['quantity']}) ou recette: {recipe_qty}")
+                                            inventory_ingredients.remove(inv_ing)
+                                            break
+                        print(f"Inventaire mis à jour après sélection de '{recette['title']}': {inventory_ingredients}")
+
+
                 except IndexError as e:
                     print(f"Erreur d'accès à la recette: {e}")
                     continue
