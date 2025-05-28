@@ -214,7 +214,7 @@ def prepare_inventory_ingredients(inventory):
     return ingredients
 
 # Fonction pour générer un plan de repas
-def generate_meal_plan(preferences=None, inventory_ingredients=None):
+def generate_meal_plan(preferences=None, inventory_ingredients=None, perso_recette=None):
     days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     meal_plan = {}
     weekly_selected_indices = set()
@@ -284,11 +284,12 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None):
     # print(f"Valid meal types for selection: {valid_meal_types}")
 
     for day in days:
+        existant_deja = len(perso_recette.get(day, []))
         num_meals = meals_per_day
         meals = []
         daily_selected_indices = set()
 
-        for _ in range(num_meals):
+        for _ in range(num_meals - existant_deja):
             ingredient_scores = None
             if inventory_ingredients:
                 print(inventory_ingredients)
@@ -497,6 +498,11 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None):
         
         meal_plan[day] = meals
     
+    for day, recipes in perso_recette.items():
+        for recet in recipes:
+            meal_plan[day].append(recet)
+
+
     return meal_plan
 
 # Routes existantes
@@ -882,6 +888,7 @@ def get_optimized_preferences_meal_plan():
 
     preferences = data.get("preferences")
     inventory = data.get("inventory", {})
+    recette = data.get("recette", {})
 
     # Valider les champs requis
     required_fields = ["inventory_id", "user_id", "grocery", "fresh_produce"]
@@ -952,7 +959,7 @@ def get_optimized_preferences_meal_plan():
             return jsonify({"error": "Invalid max_calories"}), 400
     
     # Générer le plan de repas avec les préférences et les ingrédients
-    meal_plan = generate_meal_plan(preferences=preferences, inventory_ingredients=inventory_ingredients)
+    meal_plan = generate_meal_plan(preferences=preferences, inventory_ingredients=inventory_ingredients, perso_recette=recette)
     
     if "error" in meal_plan:
         return jsonify(meal_plan), 400
