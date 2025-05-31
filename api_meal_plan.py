@@ -503,7 +503,7 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None, perso_recet
             meal_plan[day].append(recet)
 
 
-    return meal_plan
+    return meal_plan, inventory_ingredients
 
 # Routes existantes
 # @app.route('/meal_plan', methods=['GET'])
