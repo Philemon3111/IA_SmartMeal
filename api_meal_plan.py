@@ -15,6 +15,8 @@ from fractions import Fraction
 import unicodedata
 from fuzzywuzzy import fuzz
 
+from balancer import make_packet
+
 app = Flask(__name__)
 
 # Charger les données sauvegardées
@@ -283,224 +285,286 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None, perso_recet
     valid_meal_types = list(encoder.classes_)
     # print(f"Valid meal types for selection: {valid_meal_types}")
 
-    for day in days:
-        existant_deja = len(perso_recette.get(day, []))
-        num_meals = meals_per_day
-        meals = []
-        daily_selected_indices = set()
+    # for day in days:
+    existant_deja = 0#len(perso_recette.get(day, []))
+    num_meals = meals_per_day
+    meals = []
+    daily_selected_indices = set()
 
-        for _ in range(num_meals - existant_deja):
-            ingredient_scores = None
-            if inventory_ingredients:
-                print(inventory_ingredients)
-                ingredient_scores = np.zeros(len(valid_recipes))
-                for idx, recipe in valid_recipes.iterrows():
-                    recipe_ingredients = [ing for ing in recipe["ingredients"]]
-                    matches = 0
-                    matched_ingredients = []
-                    for inv_ing in inventory_ingredients:
-                        for recipe_ing in recipe_ingredients:
-                            if fuzz.partial_ratio(inv_ing["name"], recipe_ing) > 90:
-                                matches += 1
-                                matched_ingredients.append((inv_ing["name"], recipe_ing))
-                                break
-                    ingredient_scores[valid_recipes.index.get_loc(recipe.name)] = matches
-                    print(f"Recette '{recipe['title']}': {matches} correspondances -> {matched_ingredients}")
-                max_score = ingredient_scores.max() if ingredient_scores.max() > 0 else 1
-                ingredient_scores = ingredient_scores / max_score
-                print(f"Scores d'ingrédients calculés : min={ingredient_scores.min()}, max={ingredient_scores.max()}, max_score brut={max_score}")
+    for _ in range(num_meals - existant_deja):
+        ingredient_scores = None
+        if inventory_ingredients:
+            print(inventory_ingredients)
+            ingredient_scores = np.zeros(len(valid_recipes))
+            for idx, recipe in valid_recipes.iterrows():
+                recipe_ingredients = [ing for ing in recipe["ingredients"]]
+                matches = 0
+                matched_ingredients = []
+                for inv_ing in inventory_ingredients:
+                    for recipe_ing in recipe_ingredients:
+                        if fuzz.partial_ratio(inv_ing["name"], recipe_ing) > 90:
+                            matches += 1
+                            matched_ingredients.append((inv_ing["name"], recipe_ing))
+                            break
+                ingredient_scores[valid_recipes.index.get_loc(recipe.name)] = matches
+                # print(f"Recette '{recipe['title']}': {matches} correspondances -> {matched_ingredients}")
+            max_score = ingredient_scores.max() if ingredient_scores.max() > 0 else 1
+            ingredient_scores = ingredient_scores / max_score
+            # print(f"Scores d'ingrédients calculés : min={ingredient_scores.min()}, max={ingredient_scores.max()}, max_score brut={max_score}")
 
-            type_plat = random.choice(valid_meal_types)
-            try:
-                type_plat_encoded = encoder.transform([type_plat])[0]
-                # Use dataset ranges for all 6 features
-                X_input = scaler.transform([[
-                    type_plat_encoded,
-                    random.uniform(df["calories"].min(), df["calories"].max()),
-                    random.uniform(df["lipide"].min(), df["lipide"].max()),
-                    random.uniform(df["glucide"].min(), df["glucide"].max()),
-                    random.uniform(df["proteine"].min(), df["proteine"].max()),
-                    random.uniform(df["fibre"].min(), df["fibre"].max())
-                ]])
-                prediction = model.predict(X_input, verbose=0)[0]
-                print(f"Taille de prediction pour {type_plat} le {day}: {len(prediction)}")
-                
-                # First branch - if preferences or inventory_ingredients
-                if preferences or inventory_ingredients:
-                    valid_indices = list(valid_recipes.index)
-                    valid_indices = [i for i in valid_indices if i < len(df) and df.iloc[i]["type_plat"] == type_plat and i < len(prediction)]                    
-                    print(f"Taille de valid_indices pour {type_plat} le {day}: {len(valid_indices)}")
-                    
-                    # Additional validation checks
-                    valid_indices = [i for i in valid_indices if i < len(df) and i < len(prediction)]
-                    if not valid_indices:
-                        print(f"Aucune recette valide après vérification complète pour {type_plat} le {day}")
-                        continue
-                    
-                    try:
-                        valid_probs = prediction[valid_indices]
-                    except IndexError as e:
-                        print(f"Erreur d'index avec prediction array: {e}")
-                        continue
-                        
-                    print(f"Taille de valid_probs pour {type_plat} le {day}: {len(valid_probs)}")
-                    
-                    if len(valid_probs) != len(valid_indices):
-                        print(f"Erreur : valid_probs ({len(valid_probs)}) et valid_indices ({len(valid_indices)}) ont des tailles différentes")
-                        try:
-                            recette_index = random.choice(valid_indices)
-                        except IndexError:
-                            print(f"Impossible de sélectionner dans valid_indices vide pour {type_plat} le {day}")
-                            continue
-                    elif valid_probs.sum() == 0 or np.isnan(valid_probs).any():
-                        print(f"Avertissement : Probabilités invalides pour {type_plat} le {day}, sélection aléatoire")
-                        try:
-                            recette_index = random.choice(valid_indices)
-                        except IndexError:
-                            print(f"Impossible de sélectionner dans valid_indices vide pour {type_plat} le {day}")
-                            continue
-                    else:
-                        if ingredient_scores is not None:
-                            # Sélectionner les indices avec le score maximal parmi valid_indices
-                            valid_scores = ingredient_scores[:len(valid_indices)]
-                            max_score = valid_scores.max()
-                            max_score_indices = [valid_indices[i] for i in range(len(valid_indices)) if valid_scores[i] == max_score and valid_indices[i] not in daily_selected_indices]
-                            if not max_score_indices:
-                                print(f"Aucun indice avec score maximal disponible pour {type_plat} le {day}, sélection aléatoire parmi valid_indices")
-                                recette_index = random.choice(valid_indices)
-                            else:
-                                recette_index = random.choice(max_score_indices)
-                                print(f"Sélection de la recette avec score maximal {max_score} pour {type_plat} le {day}: index {recette_index}")
-                        else:
-                            # Si pas de scores d'ingrédients, utiliser les probabilités prédites
-                            valid_probs = valid_probs / valid_probs.sum()
-                            sequential_indices = list(range(len(valid_indices)))
-                            for _ in range(10):
-                                try:
-                                    seq_index = np.random.choice(sequential_indices, p=valid_probs)
-                                    recette_index = valid_indices[seq_index]
-                                    if recette_index not in daily_selected_indices:
-                                        break
-                                except (ValueError, IndexError) as e:
-                                    print(f"Erreur lors de la sélection aléatoire: {e}")
-                                    continue
-                            else:
-                                try:
-                                    seq_index = np.random.choice(sequential_indices, p=valid_probs)
-                                    recette_index = valid_indices[seq_index]
-                                except (ValueError, IndexError) as e:
-                                    print(f"Erreur lors de la sélection aléatoire finale: {e}")
-                                    continue
-                
-                # Second branch - else case
-                else:
-                    valid_indices = list(range(len(df)))
-                    valid_indices = [i for i in valid_indices if df.iloc[i]["type_plat"] == type_plat]
-                    print(f"Taille de valid_indices pour {type_plat} le {day}: {len(valid_indices)}")
-                    
-                    if len(prediction) == 0:
-                        print(f"Aucune prédiction disponible pour {type_plat} le {day}")
-                        continue
-                    
-                    # Additional validation
-                    valid_indices = [i for i in valid_indices if i < len(prediction)]
-                    if not valid_indices:
-                        print(f"Aucun indice valide après vérification pour {type_plat} le {day}")
-                        continue
-                    
-                    try:
-                        prediction = prediction / prediction.sum()
-                    except (ValueError, ZeroDivisionError) as e:
-                        print(f"Erreur de normalisation des probabilités: {e}")
-                        continue
-                    
-                    for _ in range(10):
-                        try:
-                            recette_index = np.random.choice(valid_indices, p=prediction[valid_indices])
-                            if recette_index not in daily_selected_indices:
-                                break
-                        except (ValueError, IndexError) as e:
-                            print(f"Erreur lors de la sélection aléatoire: {e}")
-                            continue
-                    else:
-                        try:
-                            recette_index = np.random.choice(valid_indices, p=prediction[valid_indices])
-                        except (ValueError, IndexError) as e:
-                            print(f"Erreur lors de la sélection aléatoire finale: {e}")
-                            continue
-
-                # Final validation before adding to meals
-                if recette_index >= len(df):
-                    print(f"Index de recette invalide {recette_index} (taille df: {len(df)})")
-                    continue
-
-                try:
-                    recette = df.iloc[recette_index]
-                    daily_selected_indices.add(recette_index)
-                    weekly_selected_indices.add(recette_index)
-                    # print("ici")
-                    # print(recette)
-                    meals.append({
-                        "items": [recette["title"] or "Plat sans titre"],
-                        "calories": int(recette["calories"]),
-                        "nutriments": {
-                            "lipide": float(recette["lipide"]),
-                            "glucide": float(recette["glucide"]),
-                            "proteine": float(recette["proteine"]),
-                            "fibre": float(recette["fibre"])
-                        },
-                        "ingredients": recette["ingredients"],
-                        "preparation": recette["instructions"],
-                        "NER": recette["NER"],
-                        "type": recette["type_plat"],
-                        "time": int(recette["time"]),
-                        "servings": int(recette["servings"])
-                    })
-                    if inventory_ingredients:
-                        recipe_ingredients = recette.get("ingredients", []) 
-                        for inv_ing in inventory_ingredients[:]:  
-                            for recipe_ing in recipe_ingredients:
-                                recipe_ing_name = re.sub(r'^\d+(\.\d+)?\s*(g|ml|kg)?\s*', '', recipe_ing, flags=re.IGNORECASE).strip()
-                                if fuzz.partial_ratio(inv_ing["name"].lower(), recipe_ing_name.lower()) > 90:
-                                    recipe_qty = parse_quantity(recipe_ing)
-                                    recipe_category = get_category(recipe_ing_name)
-                                    inv_category = get_category(inv_ing["name"])
-                                    if recipe_category == inv_category:
-                                        try:
-                                            inv_quantity = float(inv_ing["quantity"])
-                                            inv_quantity -= recipe_qty
-                                            if inv_quantity <= 0:
-                                                inventory_ingredients.remove(inv_ing)
-                                                print(f"Ingrédient '{inv_ing['name']}' épuisé et retiré de l'inventaire")
-                                            else:
-                                                inv_ing["quantity"] = str(int(inv_quantity) if inv_category in ["legumes", "fruits", "autres"] and inv_ing["type_quantity"] == "" else inv_quantity)
-                                                print(f"Ingrédient '{inv_ing['name']}' mis à jour: nouvelle quantité = {inv_ing['quantity']} {inv_ing['type_quantity']}")
-                                            break
-                                        except ValueError:
-                                            print(f"Quantité invalide pour '{inv_ing['name']}' (inventaire: {inv_ing['quantity']}) ou recette: {recipe_qty}")
-                                            inventory_ingredients.remove(inv_ing)
-                                            break
-                        print(f"Inventaire mis à jour après sélection de '{recette['title']}': {inventory_ingredients}")
-
-
-                except IndexError as e:
-                    print(f"Erreur d'accès à la recette: {e}")
-                    continue
-                except KeyError as e:
-                    print(f"Colonne manquante dans les données: {e}")
-                    continue
-                    # print(f"Recette sélectionnée : {recette['title']} (index {recette_index}) pour {type_plat} le {day}")
-                else:
-                    print(f"Index {recette_index} déjà utilisé ou invalide pour {type_plat} le {day}")
-            except (ValueError, IndexError) as e:
-                print(f"Erreur lors de la sélection de recette pour {type_plat} le {day}: {e}")
-                continue
+        # type_plat = random.choice(valid_meal_types)
+        # try:
+        #     type_plat_encoded = encoder.transform([type_plat])[0]
+        #     # Use dataset ranges for all 6 features
+        #     X_input = scaler.transform([[
+        #         type_plat_encoded,
+        #         random.uniform(df["calories"].min(), df["calories"].max()),
+        #         random.uniform(df["lipide"].min(), df["lipide"].max()),
+        #         random.uniform(df["glucide"].min(), df["glucide"].max()),
+        #         random.uniform(df["proteine"].min(), df["proteine"].max()),
+        #         random.uniform(df["fibre"].min(), df["fibre"].max())
+        #     ]])
+        #     prediction = model.predict(X_input, verbose=0)[0]
+        #     print(f"Taille de prediction pour {type_plat} le {day}: {len(prediction)}")
+            
+        result = make_packet(df, valid_recipes.index, ingredient_scores, num_meals)
+        print(result)
+        # for e in result:
+        #     for i, p in e:
+        #         print(df.iloc[i])
         
-        meal_plan[day] = meals
+        chosen_packet = []
+        while len(chosen_packet) < 7:
+            number = random.randint(0,len(result)-1)
+            if not number in chosen_packet:
+                chosen_packet.append(result[number])
+        print(chosen_packet)
+
+
+        for numbers in range(1,7):
+            e = chosen_packet[numbers]
+            meals = []
+            for recette in e:
+                meals.append({
+                    "items": [recette["title"] or "Plat sans titre"],
+                    "calories": int(recette["calories"]),
+                    "nutriments": {
+                        "lipide": float(recette["lipide"]),
+                        "glucide": float(recette["glucide"]),
+                        "proteine": float(recette["proteine"]),
+                        "fibre": float(recette["fibre"])
+                    },
+                    "ingredients": recette["ingredients"],
+                    "preparation": recette["instructions"],
+                    "NER": recette["NER"],
+                    "type": recette["type_plat"],
+                    "time": int(recette["time"]),
+                    "servings": int(recette["servings"])
+                })
+                if inventory_ingredients:
+                    recipe_ingredients = recette.get("ingredients", []) 
+                    for inv_ing in inventory_ingredients[:]:  
+                        for recipe_ing in recipe_ingredients:
+                            recipe_ing_name = re.sub(r'^\d+(\.\d+)?\s*(g|ml|kg)?\s*', '', recipe_ing, flags=re.IGNORECASE).strip()
+                            if fuzz.partial_ratio(inv_ing["name"].lower(), recipe_ing_name.lower()) > 90:
+                                recipe_qty = parse_quantity(recipe_ing)
+                                recipe_category = get_category(recipe_ing_name)
+                                inv_category = get_category(inv_ing["name"])
+                                if recipe_category == inv_category:
+                                    try:
+                                        inv_quantity = float(inv_ing["quantity"])
+                                        inv_quantity -= recipe_qty
+                                        if inv_quantity <= 0:
+                                            inventory_ingredients.remove(inv_ing)
+                                            print(f"Ingrédient '{inv_ing['name']}' épuisé et retiré de l'inventaire")
+                                        else:
+                                            inv_ing["quantity"] = str(int(inv_quantity) if inv_category in ["legumes", "fruits", "autres"] and inv_ing["type_quantity"] == "" else inv_quantity)
+                                            print(f"Ingrédient '{inv_ing['name']}' mis à jour: nouvelle quantité = {inv_ing['quantity']} {inv_ing['type_quantity']}")
+                                        break
+                                    except ValueError:
+                                        print(f"Quantité invalide pour '{inv_ing['name']}' (inventaire: {inv_ing['quantity']}) ou recette: {recipe_qty}")
+                                        inventory_ingredients.remove(inv_ing)
+                                        break
+                    print(f"Inventaire mis à jour après sélection de '{recette['title']}': {inventory_ingredients}")
+            meal_plan[days[numbers]] = meals
+        # print(meals)
+                # First branch - if preferences or inventory_ingredients
+                # if preferences or inventory_ingredients:
+                #     valid_indices = list(valid_recipes.index)
+                #     valid_indices = [i for i in valid_indices if i < len(df) and df.iloc[i]["type_plat"] == type_plat and i < len(prediction)]                    
+                #     print(f"Taille de valid_indices pour {type_plat} le {day}: {len(valid_indices)}")
+                    
+                #     # Additional validation checks
+                #     valid_indices = [i for i in valid_indices if i < len(df) and i < len(prediction)]
+                #     if not valid_indices:
+                #         print(f"Aucune recette valide après vérification complète pour {type_plat} le {day}")
+                #         continue
+                    
+                #     try:
+                #         valid_probs = prediction[valid_indices]
+                #     except IndexError as e:
+                #         print(f"Erreur d'index avec prediction array: {e}")
+                #         continue
+                        
+                #     print(f"Taille de valid_probs pour {type_plat} le {day}: {len(valid_probs)}")
+                    
+                #     if len(valid_probs) != len(valid_indices):
+                #         print(f"Erreur : valid_probs ({len(valid_probs)}) et valid_indices ({len(valid_indices)}) ont des tailles différentes")
+                #         try:
+                #             recette_index = random.choice(valid_indices)
+                #         except IndexError:
+                #             print(f"Impossible de sélectionner dans valid_indices vide pour {type_plat} le {day}")
+                #             continue
+                #     elif valid_probs.sum() == 0 or np.isnan(valid_probs).any():
+                #         print(f"Avertissement : Probabilités invalides pour {type_plat} le {day}, sélection aléatoire")
+                #         try:
+                #             recette_index = random.choice(valid_indices)
+                #         except IndexError:
+                #             print(f"Impossible de sélectionner dans valid_indices vide pour {type_plat} le {day}")
+                #             continue
+                #     else:
+                #         if ingredient_scores is not None:
+                #             # Sélectionner les indices avec le score maximal parmi valid_indices
+                #             valid_scores = ingredient_scores[:len(valid_indices)]
+                #             max_score = valid_scores.max()
+                #             max_score_indices = [valid_indices[i] for i in range(len(valid_indices)) if valid_scores[i] == max_score and valid_indices[i] not in daily_selected_indices]
+                #             if not max_score_indices:
+                #                 print(f"Aucun indice avec score maximal disponible pour {type_plat} le {day}, sélection aléatoire parmi valid_indices")
+                #                 recette_index = random.choice(valid_indices)
+                #             else:
+                #                 recette_index = random.choice(max_score_indices)
+                #                 print(f"Sélection de la recette avec score maximal {max_score} pour {type_plat} le {day}: index {recette_index}")
+                #         else:
+                #             # Si pas de scores d'ingrédients, utiliser les probabilités prédites
+                #             valid_probs = valid_probs / valid_probs.sum()
+                #             sequential_indices = list(range(len(valid_indices)))
+                #             for _ in range(10):
+                #                 try:
+                #                     seq_index = np.random.choice(sequential_indices, p=valid_probs)
+                #                     recette_index = valid_indices[seq_index]
+                #                     if recette_index not in daily_selected_indices:
+                #                         break
+                #                 except (ValueError, IndexError) as e:
+                #                     print(f"Erreur lors de la sélection aléatoire: {e}")
+                #                     continue
+                #             else:
+                #                 try:
+                #                     seq_index = np.random.choice(sequential_indices, p=valid_probs)
+                #                     recette_index = valid_indices[seq_index]
+                #                 except (ValueError, IndexError) as e:
+                #                     print(f"Erreur lors de la sélection aléatoire finale: {e}")
+                #                     continue
+                
+                # # Second branch - else case
+                # else:
+                #     valid_indices = list(range(len(df)))
+                #     valid_indices = [i for i in valid_indices if df.iloc[i]["type_plat"] == type_plat]
+                #     print(f"Taille de valid_indices pour {type_plat} le {day}: {len(valid_indices)}")
+                    
+                #     if len(prediction) == 0:
+                #         print(f"Aucune prédiction disponible pour {type_plat} le {day}")
+                #         continue
+                    
+                #     # Additional validation
+                #     valid_indices = [i for i in valid_indices if i < len(prediction)]
+                #     if not valid_indices:
+                #         print(f"Aucun indice valide après vérification pour {type_plat} le {day}")
+                #         continue
+                    
+                #     try:
+                #         prediction = prediction / prediction.sum()
+                #     except (ValueError, ZeroDivisionError) as e:
+                #         print(f"Erreur de normalisation des probabilités: {e}")
+                #         continue
+                    
+                #     for _ in range(10):
+                #         try:
+                #             recette_index = np.random.choice(valid_indices, p=prediction[valid_indices])
+                #             if recette_index not in daily_selected_indices:
+                #                 break
+                #         except (ValueError, IndexError) as e:
+                #             print(f"Erreur lors de la sélection aléatoire: {e}")
+                #             continue
+                #     else:
+                #         try:
+                #             recette_index = np.random.choice(valid_indices, p=prediction[valid_indices])
+                #         except (ValueError, IndexError) as e:
+                #             print(f"Erreur lors de la sélection aléatoire finale: {e}")
+                #             continue
+
+                # # Final validation before adding to meals
+                # if recette_index >= len(df):
+                #     print(f"Index de recette invalide {recette_index} (taille df: {len(df)})")
+                #     continue
+
+                # try:
+        # recette = df.iloc[recette_index]
+        # daily_selected_indices.add(recette_index)
+        # weekly_selected_indices.add(recette_index)
+        # print("ici")
+        # print(recette)
+        
+        # meals.append({
+        #     "items": [recette["title"] or "Plat sans titre"],
+        #     "calories": int(recette["calories"]),
+        #     "nutriments": {
+        #         "lipide": float(recette["lipide"]),
+        #         "glucide": float(recette["glucide"]),
+        #         "proteine": float(recette["proteine"]),
+        #         "fibre": float(recette["fibre"])
+        #     },
+        #     "ingredients": recette["ingredients"],
+        #     "preparation": recette["instructions"],
+        #     "NER": recette["NER"],
+        #     "type": recette["type_plat"],
+        #     "time": int(recette["time"]),
+        #     "servings": int(recette["servings"])
+        # })
+        # if inventory_ingredients:
+        #     recipe_ingredients = recette.get("ingredients", []) 
+        #     for inv_ing in inventory_ingredients[:]:  
+        #         for recipe_ing in recipe_ingredients:
+        #             recipe_ing_name = re.sub(r'^\d+(\.\d+)?\s*(g|ml|kg)?\s*', '', recipe_ing, flags=re.IGNORECASE).strip()
+        #             if fuzz.partial_ratio(inv_ing["name"].lower(), recipe_ing_name.lower()) > 90:
+        #                 recipe_qty = parse_quantity(recipe_ing)
+        #                 recipe_category = get_category(recipe_ing_name)
+        #                 inv_category = get_category(inv_ing["name"])
+        #                 if recipe_category == inv_category:
+        #                     try:
+        #                         inv_quantity = float(inv_ing["quantity"])
+        #                         inv_quantity -= recipe_qty
+        #                         if inv_quantity <= 0:
+        #                             inventory_ingredients.remove(inv_ing)
+        #                             print(f"Ingrédient '{inv_ing['name']}' épuisé et retiré de l'inventaire")
+        #                         else:
+        #                             inv_ing["quantity"] = str(int(inv_quantity) if inv_category in ["legumes", "fruits", "autres"] and inv_ing["type_quantity"] == "" else inv_quantity)
+        #                             print(f"Ingrédient '{inv_ing['name']}' mis à jour: nouvelle quantité = {inv_ing['quantity']} {inv_ing['type_quantity']}")
+        #                         break
+        #                     except ValueError:
+        #                         print(f"Quantité invalide pour '{inv_ing['name']}' (inventaire: {inv_ing['quantity']}) ou recette: {recipe_qty}")
+        #                         inventory_ingredients.remove(inv_ing)
+        #                         break
+        #     print(f"Inventaire mis à jour après sélection de '{recette['title']}': {inventory_ingredients}")
+
+
+            #     except IndexError as e:
+            #         print(f"Erreur d'accès à la recette: {e}")
+            #         continue
+            #     except KeyError as e:
+            #         print(f"Colonne manquante dans les données: {e}")
+            #         continue
+            #         # print(f"Recette sélectionnée : {recette['title']} (index {recette_index}) pour {type_plat} le {day}")
+            #     else:
+            #         print(f"Index {recette_index} déjà utilisé ou invalide pour {type_plat} le {day}")
+            # except (ValueError, IndexError) as e:
+            #     print(f"Erreur lors de la sélection de recette pour {type_plat} le {day}: {e}")
+            #     continue
+        
+        # meal_plan[day] = meals
     
-    for day, recipes in perso_recette.items():
-        for recet in recipes:
-            meal_plan[day].append(recet)
+    # for day, recipes in perso_recette.items():
+    #     for recet in recipes:
+    #         meal_plan[day].append(recet)
 
 
     return meal_plan
