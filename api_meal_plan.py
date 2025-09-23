@@ -23,6 +23,7 @@ app = Flask(__name__)
 dir = "version7/"
 try:
     df = pd.read_pickle(dir + "recipes.pkl")
+    df = df.reset_index(drop=True)
     with open(dir + "label.pkl", "rb") as f:
         encoder = pickle.load(f)
     with open(dir + "scaler.pkl", "rb") as f:
@@ -141,6 +142,9 @@ if os.path.exists(chemin_allergie):
 def is_recipe_valid(recipe, allergies, diet, max_calories=None):
     ingredients = [ing for ing in recipe["NER"]]
     
+    if diet is None:
+        diet = "nodiet"
+
     # Vérifier les allergènes
     for allergen, is_allergic in allergies.items():
         if is_allergic:
@@ -183,7 +187,6 @@ def is_recipe_valid(recipe, allergies, diet, max_calories=None):
             if any(non_paleo in ing for non_paleo in ner_paleo):
                 print(f"Recette '{recipe['title']}' rejetée pour ingrédient non-paléo : {ing}")
                 return False
-
     # Vérifier les calories
     if max_calories and recipe["calories"] > max_calories:
         print(f"Recette '{recipe['title']}' rejetée pour calories : {recipe['calories']} > {max_calories}")
@@ -228,7 +231,8 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None, perso_recet
         number_of_meals = preferences.get("number_of_meals", 6)
         grocery_day = preferences.get("grocery_day", "Monday")
         max_calories = preferences.get("max_calories", None)
-        
+        if diet is None:
+            diet = "nodiet"
         if not isinstance(number_of_meals, int) or number_of_meals < 1:
             print("Erreur : number_of_meals doit être un entier positif")
             return {"error": "Invalid number_of_meals, must be a positive integer"}
@@ -326,9 +330,9 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None, perso_recet
         #     ]])
         #     prediction = model.predict(X_input, verbose=0)[0]
         #     print(f"Taille de prediction pour {type_plat} le {day}: {len(prediction)}")
-            
+        # print(valid_recipes.index)     
         result = make_packet(df, valid_recipes.index, ingredient_scores, num_meals)
-        print(result)
+        #print(result)
         # for e in result:
         #     for i, p in e:
         #         print(df.iloc[i])
@@ -338,10 +342,10 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None, perso_recet
             number = random.randint(0,len(result)-1)
             if not number in chosen_packet:
                 chosen_packet.append(result[number])
-        print(chosen_packet)
+        #print(chosen_packet)
 
 
-        for numbers in range(1,7):
+        for numbers in range(0,7):
             e = chosen_packet[numbers]
             meals = []
             for recette in e:
