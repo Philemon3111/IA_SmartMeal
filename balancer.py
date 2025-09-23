@@ -1,4 +1,9 @@
+import numpy as np
+
 def make_packet(df, valid_idx, scores, N):
+
+    if scores is None:
+        scores = np.ones(len(valid_idx)) / len(valid_idx)  # Uniform scores if None
     # Pair (row, score) where row is a recipe from the DataFrame
     items = sorted(
         [(df.iloc[i], score) for i, score in zip(valid_idx, scores)],

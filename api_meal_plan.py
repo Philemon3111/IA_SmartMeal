@@ -926,17 +926,23 @@ def get_optimized_meal_plan():
     if not isinstance(data["fresh_produce"], list):
         return jsonify({"error": "fresh_produce must be a list"}), 400
     
-    # Extraire les ingrédients de grocery et fresh_produce
+
     inventory_ingredients = []
     for item in data["grocery"] + data["fresh_produce"]:
         if not isinstance(item, dict) or "name" not in item:
             return jsonify({"error": "Each grocery or fresh_produce item must be a dictionary with a 'name' field"}), 400
-        inventory_ingredients.append(item["name"])
-    
+        ingredient = {
+            "name": item["name"],
+            "quantity": item["quantity"],  # Garder comme chaîne pour l'instant
+            "type_quantity": item.get("type_quantity", "")  # Utiliser get pour gérer les cas où type_quantity est absent
+        }
+        inventory_ingredients.append(ingredient)
+
+    # Supprimez ou commentez cette vérification pour autoriser un inventaire vide
+    # if not inventory_ingredients:
+    #     return jsonify({"error": "No ingredients provided in grocery or fresh_produce"}), 400
     if not inventory_ingredients:
-        return jsonify({"error": "No ingredients provided in grocery or fresh_produce"}), 400
-    
-    print(f"Ingrédients de l'inventaire : {inventory_ingredients}")
+        print(f"Ingrédients de l'inventaire : {inventory_ingredients}")  # Log pour debug
     
     # Générer le plan de repas avec les ingrédients de l'inventaire
     meal_plan = generate_meal_plan(inventory_ingredients=inventory_ingredients)
@@ -988,8 +994,8 @@ def get_optimized_preferences_meal_plan():
         }
         inventory_ingredients.append(ingredient)
     
-    if not inventory_ingredients:
-        return jsonify({"error": "No ingredients provided in grocery or fresh_produce"}), 400
+    #if not inventory_ingredients:
+    #    return jsonify({"error": "No ingredients provided in grocery or fresh_produce"}), 400
     
     print(f"Ingrédients de l'inventaire : {inventory_ingredients}")
     
