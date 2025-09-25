@@ -282,14 +282,14 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None, perso_recet
     #    ingredient_scores = ingredient_scores / max_score
     #    print(f"Scores d'ingrédients calculés : min={ingredient_scores.min()}, max={ingredient_scores.max()}, max_score brut={max_score}")
 
-    valid_meal_types = list(encoder.classes_)
+    #valid_meal_types = list(encoder.classes_)
     # print(f"Valid meal types for selection: {valid_meal_types}")
 
     # for day in days:
     existant_deja = 0#len(perso_recette.get(day, []))
     num_meals = meals_per_day
     meals = []
-    daily_selected_indices = set()
+    #daily_selected_indices = set()
 
     for _ in range(num_meals - existant_deja):
         ingredient_scores = None
@@ -387,6 +387,14 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None, perso_recet
                                         break
                     print(f"Inventaire mis à jour après sélection de '{recette['title']}': {inventory_ingredients}")
             meal_plan[days[numbers]] = meals
+        
+        for day, recipes in perso_recette.items():
+            for recipe in recipes:
+                change = meal_plan[day].find(lambda x: x["type"] == recipe["type"])
+                if change:
+                    meal_plan[day].remove(change)
+                    meal_plan[day].append(recipe)
+            
         # print(meals)
                 # First branch - if preferences or inventory_ingredients
                 # if preferences or inventory_ingredients:
