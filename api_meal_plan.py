@@ -391,13 +391,15 @@ def generate_meal_plan(preferences=None, inventory_ingredients=None, perso_recet
                                         break
                     print(f"Inventaire mis à jour après sélection de '{recette['title']}': {inventory_ingredients}")
             meal_plan[days[numbers]] = meals
-        
+
         for day, recipes in perso_recette.items():
             for recipe in recipes:
-                change = meal_plan[day].find(lambda x: x["type"] == recipe["type"])
+                change = next((item for item in meal_plan[day] if item["type"] == recipe["type"]), None)
+                
                 if change:
                     meal_plan[day].remove(change)
                     meal_plan[day].append(recipe)
+
             
         # print(meals)
                 # First branch - if preferences or inventory_ingredients
